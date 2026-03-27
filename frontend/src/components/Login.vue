@@ -1,0 +1,508 @@
+<script setup>
+import { ref, reactive } from 'vue'
+import axios from 'axios'
+
+const emit = defineEmits(['login-success'])
+
+const form = reactive({
+  username: '',
+  password: '',
+  remember: false
+})
+
+const loading = ref(false)
+const error = ref('')
+const showPassword = ref(false)
+
+
+const handleLogin = async () => {
+  error.value = ''
+  loading.value = true
+  
+  try {
+    const response = await axios.post('/api/auth/login', {
+      username: form.username,
+      password: form.password
+    })
+    
+    console.log('Login response:', response)
+    
+    // 检查后端返回的业务码
+    const data = response.data
+    if (data.code === 200) {
+      // 保存token到本地存储
+      const token = data.data?.token || data.token
+      const userInfo = data.data || data
+      console.log('Token:', token)
+      console.log('UserInfo:', userInfo)
+      
+      if (token) {
+        localStorage.setItem('token', token)
+        localStorage.setItem('userInfo', JSON.stringify(userInfo))
+        console.log('Token saved to localStorage')
+        // 直接跳转，不依赖事件触发
+        setTimeout(() => {
+          window.location.href = '/'
+        }, 100)
+      } else {
+        error.value = '登录成功但未获取到token'
+        console.log('No token found in response')
+      }
+    } else {
+      // 显示后端返回的错误信息
+      error.value = data.message || data.msg || '登录失败'
+      console.log('Login failed:', data.message || data.msg)
+    }
+  } catch (err) {
+    error.value = err.message || '网络错误'
+    console.log('Login error:', err)
+  } finally {
+    loading.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="login-container">
+    <h2>欢迎使用 EeveeAgent!</h2>
+    
+    <div class="login-content">
+      <div class="form-group">
+        <div class="input-wrapper">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </span>
+          <input 
+            v-model="form.username" 
+            type="text" 
+            placeholder="用户名"
+            :disabled="loading"
+          />
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <div class="input-wrapper">
+          <span class="icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </span>
+          <input 
+            v-model="form.password" 
+            :type="showPassword ? 'text' : 'password'" 
+            placeholder="密码"
+            :disabled="loading"
+          />
+          <button 
+            type="button" 
+            class="password-toggle" 
+            @click="showPassword = !showPassword"
+            :disabled="loading"
+          >
+            <svg v-if="!showPassword" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path>
+              <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path>
+              <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"></path>
+              <line x1="2" y1="2" x2="22" y2="22"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+      
+
+      
+      <div v-if="error" class="error-message">
+        {{ error }}
+      </div>
+      
+      <button 
+        class="login-button" 
+        @click="handleLogin"
+        :disabled="loading"
+      >
+        {{ loading ? '登录中...' : '登录' }}
+      </button>
+
+      <div class="remember-container">
+        <label class="remember-label">
+          记住密码
+          <label class="switch">
+            <input
+                v-model="form.remember"
+                type="checkbox"
+                :disabled="loading"
+            />
+            <span class="slider"></span>
+          </label>
+        </label>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.login-container {
+  min-height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: url('/images/background.png') !important;
+  padding: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  margin: 0;
+  z-index: 1;
+  box-sizing: border-box;
+}
+
+.login-content {
+  width: 100%;
+  max-width: 320px;
+  position: relative;
+  z-index: 10;
+  padding: 0 20px;
+  box-sizing: border-box;
+}
+
+.login-container h2 {
+  text-align: center;
+  margin-bottom: 30px;
+  color: white;
+  font-size: 24px;
+  font-weight: 600;
+  font-family: 'SimSun', serif;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  position: relative;
+  z-index: 10;
+}
+
+.login-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxkZWZzPjxwYXR0ZXJuIGlkPSJwYXR0ZXJuIiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiPjxwYXRoIGQ9Ik0gNDAgMCBMIDAgMCAwIDQwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMC41Ii8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI3BhdHRlcm4pIiAvPjwvc3ZnPg==');
+  opacity: 0.1;
+  z-index: 1;
+}
+
+.login-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 2;
+}
+
+.form-group {
+  margin-bottom: 20px;
+  position: relative;
+  z-index: 11;
+}
+
+.input-wrapper {
+  position: relative;
+  border: none;
+  border-radius: 50px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(5px) !important;
+  -webkit-backdrop-filter: blur(5px) !important;
+  z-index: 11;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  /* 确保初始渲染时就应用玻璃态效果 */
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  /* 防止样式被覆盖 */
+  -webkit-box-shadow: none !important;
+  -moz-box-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent !important;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  z-index: 12;
+  box-sizing: border-box;
+}
+
+.password-toggle:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.password-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input-wrapper:focus-within {
+  background: rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.icon {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  z-index: 12;
+}
+
+input {
+  width: 100%;
+  padding: 12px 15px 12px 40px;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: white !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  z-index: 12;
+  position: relative;
+  box-sizing: border-box;
+}
+
+
+
+input::placeholder {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+input:focus {
+  color: white !important;
+}
+
+.remember-container {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-start;
+  position: relative;
+  z-index: 11;
+}
+
+.remember-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  position: relative;
+  z-index: 11;
+}
+
+.remember-label .switch {
+  margin-left: 8px;
+}
+
+/* 开关样式 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+  z-index: 11;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.2);
+  transition: .4s;
+  border-radius: 20px;
+  z-index: 1;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+  z-index: 2;
+}
+
+input:checked + .slider {
+  background-color: rgba(102, 126, 234, 0.6);
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+.error-message {
+  background-color: rgba(255, 170, 170, 0.3);
+  color: #fff;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  border: 1px solid rgba(255, 170, 170, 0.5);
+  position: relative;
+  z-index: 11;
+}
+
+.login-button {
+  width: 100%;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.2) !important;
+  backdrop-filter: blur(5px) !important;
+  -webkit-backdrop-filter: blur(5px) !important;
+  color: white !important;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 11;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.login-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.login-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* 全局样式重置，确保没有其他样式干扰 */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* 确保登录容器始终覆盖整个屏幕 */
+.login-container {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* 确保输入框始终保持玻璃态 */
+.input-wrapper,
+.login-button {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* 解决Chrome等webkit内核浏览器自动填充时的白框问题 */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  /* 使用透明背景 */
+  background: transparent !important;
+  /* 覆盖默认的白色背景 */
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: white !important;
+  /* 禁用默认的填充样式 */
+  transition: background-color 5000s ease-in-out 0s !important;
+  /* 确保文字颜色保持白色 */
+  color: white !important;
+  /* 确保不显示默认的填充背景 */
+  box-shadow: 0 0 0 30px rgba(255, 255, 255, 0.1) inset !important;
+  -webkit-box-shadow: 0 0 0 30px rgba(255, 255, 255, 0.1) inset !important;
+  /* 确保边框样式一致 */
+  border: none !important;
+  outline: none !important;
+}
+
+/* 确保input-wrapper在自动填充时也保持玻璃态 */
+.input-wrapper:-webkit-autofill,
+.input-wrapper:-webkit-autofill:hover,
+.input-wrapper:-webkit-autofill:focus,
+.input-wrapper:-webkit-autofill:active {
+  background: rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(5px) !important;
+  -webkit-backdrop-filter: blur(5px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+@media (max-width: 480px) {
+  .login-container h2 {
+    font-size: 24px;
+    margin-bottom: 30px;
+  }
+  
+  .login-content {
+    padding: 0 15px;
+  }
+  
+  input {
+    padding: 12px 15px 12px 45px;
+  }
+  
+  .login-button {
+    padding: 12px;
+  }
+}
+</style>
