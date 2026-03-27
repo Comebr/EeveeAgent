@@ -468,9 +468,6 @@ input:-webkit-autofill:active {
   transition: background-color 5000s ease-in-out 0s !important;
   /* 确保文字颜色保持白色 */
   color: white !important;
-  /* 确保不显示默认的填充背景 */
-  box-shadow: 0 0 0 30px rgba(255, 255, 255, 0.1) inset !important;
-  -webkit-box-shadow: 0 0 0 30px rgba(255, 255, 255, 0.1) inset !important;
   /* 确保边框样式一致 */
   border: none !important;
   outline: none !important;
