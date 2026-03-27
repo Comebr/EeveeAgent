@@ -1,6 +1,7 @@
 package com.azheng.boot.user.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
+import cn.hutool.core.util.StrUtil;
 import com.azheng.boot.user.Do.UserDo;
 import com.azheng.boot.user.dto.LoginDto;
 import com.azheng.boot.user.mapper.userMapper;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 public class AuthServiceImpl implements AuthService {
 
     private final userMapper userMapper;
+    public static final String DEFAULT_AVATAR = "static/default-avatar.png";
 
 
     /**
@@ -30,7 +32,7 @@ public class AuthServiceImpl implements AuthService {
         // 根据用户名获取用户信息
         UserDo user = getUserByName(username);
         // 校验
-        if(user == null || !user.getPassword().equals(password)){
+        if(user == null || !user.getPassword().equals(password)) {
             throw new RuntimeException("用户名或密码错误！");
         }
 
@@ -41,11 +43,9 @@ public class AuthServiceImpl implements AuthService {
         }
         StpUtil.login(loginId);
         //用户头像头像预设
-        if(user.getAvatar().isBlank()){
-            user.setAvatar("/static/default-avatar.png");
-        }
+        String avatar = StrUtil.isBlank(user.getAvatar()) ? DEFAULT_AVATAR : user.getAvatar();
 
-        return new LoginVo(loginId,user.getRole(),StpUtil.getTokenValue(),user.getAvatar());
+        return new LoginVo(loginId,user.getRole(),StpUtil.getTokenValue(),avatar);
     }
 
     /**
