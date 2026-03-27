@@ -1,4 +1,4 @@
-package com.azheng.framework.user.vo;
+package com.azheng.boot.user.vo;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

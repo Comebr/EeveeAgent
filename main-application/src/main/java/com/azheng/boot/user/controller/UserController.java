@@ -1,7 +1,7 @@
-package com.azheng.framework.user.controller;
+package com.azheng.boot.user.controller;
 
 import com.azheng.framework.Result;
-import com.azheng.framework.user.util.FileUploadUtils;
+import com.azheng.boot.user.util.FileUploadUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.beans.factory.annotation.Value;

@@ -1,10 +1,7 @@
-package com.azheng.framework.user.service;
+package com.azheng.boot.user.service;
 
-import com.azheng.framework.user.Do.UserDo;
-import com.azheng.framework.user.dto.LoginDto;
-import com.azheng.framework.user.vo.LoginVo;
-import com.baomidou.mybatisplus.extension.service.IService;
-
+import com.azheng.boot.user.dto.LoginDto;
+import com.azheng.boot.user.vo.LoginVo;
 
 /**
  * 定义用户登录相关的各种方法

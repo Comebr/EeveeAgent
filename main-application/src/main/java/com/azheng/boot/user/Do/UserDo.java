@@ -1,4 +1,4 @@
-package com.azheng.framework.user.Do;
+package com.azheng.boot.user.Do;
 
 
 import com.baomidou.mybatisplus.annotation.*;

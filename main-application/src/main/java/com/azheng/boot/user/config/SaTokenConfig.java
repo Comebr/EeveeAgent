@@ -1,4 +1,4 @@
-package com.azheng.framework.user.config;
+package com.azheng.boot.user.config;
 
 import cn.dev33.satoken.interceptor.SaInterceptor;
 import cn.dev33.satoken.stp.StpUtil;
@@ -7,7 +7,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-import org.springframework.web.servlet.config.annotation.InterceptorRegistration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -44,7 +43,7 @@ public class SaTokenConfig implements WebMvcConfigurer {
               // 拦截所有路径
               .addPathPatterns("/**")
               // 排除认证相关路径和错误页面
-              .excludePathPatterns("/auth/**", "/error");
+              .excludePathPatterns("/api/auth/**", "/error");
    }
 
     @Override

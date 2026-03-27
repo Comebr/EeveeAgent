@@ -1,6 +1,6 @@
-package com.azheng.framework.user.mapper;
+package com.azheng.boot.user.mapper;
 
-import com.azheng.framework.user.Do.UserDo;
+import com.azheng.boot.user.Do.UserDo;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 
 public interface userMapper extends BaseMapper<UserDo> {

@@ -1,13 +1,12 @@
-package com.azheng.framework.user.service.impl;
+package com.azheng.boot.user.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
-import com.azheng.framework.user.Do.UserDo;
-import com.azheng.framework.user.dto.LoginDto;
-import com.azheng.framework.user.mapper.userMapper;
-import com.azheng.framework.user.service.AuthService;
-import com.azheng.framework.user.vo.LoginVo;
+import com.azheng.boot.user.Do.UserDo;
+import com.azheng.boot.user.dto.LoginDto;
+import com.azheng.boot.user.mapper.userMapper;
+import com.azheng.boot.user.service.AuthService;
+import com.azheng.boot.user.vo.LoginVo;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

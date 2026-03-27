@@ -1,6 +1,5 @@
-package com.azheng.framework.user.util;
+package com.azheng.boot.user.util;
 
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;

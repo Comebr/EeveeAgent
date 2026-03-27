@@ -1,4 +1,4 @@
-package com.azheng.framework.user.dto;
+package com.azheng.boot.user.dto;
 
 import lombok.Data;
 
