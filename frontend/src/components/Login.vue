@@ -42,7 +42,7 @@ const handleLogin = async () => {
         console.log('Token saved to localStorage')
         // 直接跳转，不依赖事件触发
         setTimeout(() => {
-          window.location.href = '/'
+          window.location.href = '/home'
         }, 100)
       } else {
         error.value = '登录成功但未获取到token'

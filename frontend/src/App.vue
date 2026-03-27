@@ -1,26 +1,27 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import Login from './components/Login.vue'
-import Home from './components/Home.vue'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const isLoggedIn = ref(false)
 
 onMounted(() => {
   // 检查本地存储中是否有token
   const token = localStorage.getItem('token')
   isLoggedIn.value = !!token
+  
+  // 如果未登录且不在登录页，重定向到登录页
+  if (!isLoggedIn.value && router.currentRoute.value.path !== '/') {
+    router.push('/')
+  }
 })
 
 const handleLoginSuccess = () => {
   isLoggedIn.value = true
+  router.push('/home')
 }
 </script>
 
 <template>
-  <div v-if="isLoggedIn">
-    <Home />
-  </div>
-  <div v-else>
-    <Login @login-success="handleLoginSuccess" />
-  </div>
+  <router-view />
 </template>
