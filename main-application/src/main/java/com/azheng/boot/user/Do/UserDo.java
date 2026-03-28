@@ -27,7 +27,6 @@ public class UserDo {
     private String username;
     private String password;
 
-    private String nickname;
     private String avatar;//用户头像
     private String role;  //角色
 
