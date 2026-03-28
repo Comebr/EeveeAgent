@@ -1,0 +1,65 @@
+package com.azheng.framework.web;
+
+import com.azheng.framework.errorcode.BaseErrorCode;
+import com.azheng.framework.exception.AbstractException;
+import org.apache.ibatis.jdbc.Null;
+
+import java.util.Optional;
+
+/**
+ * 通过Results.xxx()方法来去调用
+ */
+public final class  Results {
+
+    /**
+     * 无返回数据的成功响应
+     */
+    public static Result<Void> success(){
+        return new Result<Void>()
+                .setCode(Result.SUCCESS_CODE);
+    }
+
+    /**
+     * 带返回数据的成功响应
+     */
+    public static <T> Result<T> success(T data){
+        return new Result<T>()
+                .setCode(Result.SUCCESS_CODE)
+                .setData(data);
+    }
+
+    /**
+     * 服务端失败响应
+     */
+    public static Result<Void> failure(){
+        return new Result<Void>()
+                .setCode(BaseErrorCode.SERVICE_ERROR.code())
+                .setMessage(BaseErrorCode.SERVICE_ERROR.message());
+    }
+
+    /**
+     * 通过错误码构建失败响应
+     */
+
+    static Result<Void> failure(String errorCode, String errorMessage){
+        return new Result<Void>()
+                .setCode(errorCode)
+                .setMessage(errorMessage);
+    }
+
+    /**
+     * 通过异常对象构建失败响应
+     */
+    static Result<Void> failure(AbstractException abstractException){
+        // 空值检验：取到了就用、没取到（null）则用else里的
+        String errorCode = Optional.ofNullable(abstractException.getErrorCode())
+                .orElse(BaseErrorCode.SERVICE_ERROR.code());
+        String errorMessage = Optional.ofNullable(abstractException.getErrorMessage())
+                .orElse(BaseErrorCode.SERVICE_ERROR.message());
+
+        return new Result<Void>()
+                .setCode(errorCode)
+                .setMessage(errorMessage);
+    }
+}
+
