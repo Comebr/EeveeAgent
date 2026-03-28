@@ -1,10 +1,11 @@
 package com.azheng.boot.user.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
-import com.azheng.framework.Result;
 import com.azheng.boot.user.dto.LoginDto;
 import com.azheng.boot.user.service.AuthService;
 import com.azheng.boot.user.vo.LoginVo;
+import com.azheng.framework.web.Result;
+import com.azheng.framework.web.Results;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,12 +23,8 @@ public class AuthController {
      */
     @PostMapping("/login")
     public Result<LoginVo> login(@RequestBody LoginDto loginDTO) {
-        try {
-            LoginVo login = authService.login(loginDTO);
-            return Result.success(login);
-        }catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        LoginVo login = authService.login(loginDTO);
+        return Results.success(login);
     }
 
 
@@ -37,6 +34,6 @@ public class AuthController {
     @PostMapping("/logout")
     public Result<Void> logout() {
         StpUtil.logout();
-        return Result.success();
+        return Results.success();
     }
 }

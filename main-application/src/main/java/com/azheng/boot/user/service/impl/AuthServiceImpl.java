@@ -7,6 +7,8 @@ import com.azheng.boot.user.dto.LoginDto;
 import com.azheng.boot.user.mapper.userMapper;
 import com.azheng.boot.user.service.AuthService;
 import com.azheng.boot.user.vo.LoginVo;
+import com.azheng.framework.exception.ClientException;
+import com.azheng.framework.errorcode.BaseErrorCode;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,13 +35,13 @@ public class AuthServiceImpl implements AuthService {
         UserDo user = getUserByName(username);
         // 校验
         if(user == null || !user.getPassword().equals(password)) {
-            throw new RuntimeException("用户名或密码错误！");
+            throw new ClientException( "用户名或密码错误！");
         }
 
         // 调用登录方法
         String loginId = user.getId().toString();
         if(loginId.isBlank()){
-            throw new RuntimeException("用户信息异常");
+            throw new ClientException("用户信息异常");
         }
         StpUtil.login(loginId);
         //用户头像头像预设
