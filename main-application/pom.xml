@@ -24,6 +24,12 @@
             <artifactId>core-framework</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!--继承AI模块依赖-->
+        <dependency>
+            <groupId>com.atazheng-study</groupId>
+            <artifactId>eevee-ai</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--MySQL驱动-->
         <dependency>

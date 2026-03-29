@@ -17,4 +17,31 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+    <dependencies>
+
+        <dependency>
+            <groupId>com.atazheng-study</groupId>
+            <artifactId>core-framework</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--1. OpenAI 模型自动配置（包含了 langchain4j 核心主包和 langchain4j-open-ai 基础包）-->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
+        </dependency>
+        <!--2 AI Services 高阶支持（@AiService、工具调用、会话记忆、RAG 自动装配）-->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- 3. 通义千问模型接入 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-community-dashscope-spring-boot-starter</artifactId>
+        </dependency>
+
+    </dependencies>
+
 </project>

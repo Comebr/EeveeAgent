@@ -21,7 +21,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.Objects;
+
 
 @Service
 public class UserServiceImpl implements UserService {
@@ -51,6 +51,8 @@ public class UserServiceImpl implements UserService {
         }
         // 设置角色
         String role = normalizeRole(createUserRequest.getRole());
+        //校验邮箱号长度
+
         UserDO userDO = UserDO.builder()
                 .username(userName)
                 .password(password)
