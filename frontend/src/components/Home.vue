@@ -1,18 +1,35 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
 
 const router = useRouter()
 const userInfo = ref(null)
 const showUserMenu = ref(false)
 const sidebarCollapsed = ref(false)
 
-onMounted(() => {
-  // 从本地存储获取用户信息
-  const storedUserInfo = localStorage.getItem('userInfo')
-  if (storedUserInfo) {
-    userInfo.value = JSON.parse(storedUserInfo)
+// 实时获取用户信息
+const fetchUserInfo = async () => {
+  try {
+    const response = await axios.get('/api/user/current')
+    if (response.data.code === '0') {
+      userInfo.value = response.data.data
+      // 更新本地存储
+      localStorage.setItem('userInfo', JSON.stringify(response.data.data))
+    }
+  } catch (error) {
+    console.error('获取用户信息失败:', error)
+    // 如果获取失败，尝试从本地存储获取
+    const storedUserInfo = localStorage.getItem('userInfo')
+    if (storedUserInfo) {
+      userInfo.value = JSON.parse(storedUserInfo)
+    }
   }
+}
+
+onMounted(() => {
+  // 实时获取用户信息
+  fetchUserInfo()
   
   // 点击外部关闭菜单
   document.addEventListener('click', handleClickOutside)
@@ -124,22 +141,22 @@ const goToAdmin = () => {
       <div class="sidebar-footer">
         <div class="user-menu-container" v-show="!sidebarCollapsed">
           <div class="user-info" @click="toggleUserMenu">
-            <div class="avatar">
-              <img v-if="userInfo?.avatar" :src="userInfo.avatar" alt="avatar" />
-              <span v-else>{{ userInfo?.username?.charAt(0).toUpperCase() || 'U' }}</span>
+              <div class="avatar">
+                <img v-if="userInfo?.avatar" :src="userInfo.avatar" alt="avatar" />
+                <span v-else>{{ userInfo?.username?.charAt(0).toUpperCase() || 'U' }}</span>
+              </div>
+              <div class="user-details">
+                <div class="username">{{ userInfo?.username || 'MOMO' }}</div>
+                <div class="role">{{ userInfo?.role || 'User' }}</div>
+              </div>
+              <button class="more-button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="5" r="1"/>
+                  <circle cx="12" cy="12" r="1"/>
+                  <circle cx="12" cy="19" r="1"/>
+                </svg>
+              </button>
             </div>
-            <div class="user-details">
-              <div class="username">{{ userInfo?.username || 'MOMO' }}</div>
-              <div class="email">{{ userInfo?.email || 'momo@MODAO.com' }}</div>
-            </div>
-            <button class="more-button">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="5" r="1"/>
-                <circle cx="12" cy="12" r="1"/>
-                <circle cx="12" cy="19" r="1"/>
-              </svg>
-            </button>
-          </div>
           
           <!-- 下拉菜单 -->
           <div v-if="showUserMenu" class="user-dropdown">
@@ -444,7 +461,7 @@ html, body {
   text-overflow: ellipsis;
 }
 
-.email {
+.role {
   font-size: 12px;
   color: #999;
   line-height: 1.4;

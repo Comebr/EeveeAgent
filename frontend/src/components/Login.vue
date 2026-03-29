@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import axios from 'axios'
 
 const emit = defineEmits(['login-success'])
@@ -14,9 +14,44 @@ const loading = ref(false)
 const error = ref('')
 const showPassword = ref(false)
 
+// 表单验证错误
+const formErrors = reactive({
+  username: '',
+  password: ''
+})
+
+// 验证表单
+const validateForm = () => {
+  let isValid = true
+  
+  // 重置错误信息
+  formErrors.username = ''
+  formErrors.password = ''
+  
+  // 验证用户名
+  if (!form.username.trim()) {
+    formErrors.username = '用户名不能为空'
+    isValid = false
+  }
+  
+  // 验证密码
+  if (!form.password.trim()) {
+    formErrors.password = '密码不能为空'
+    isValid = false
+  }
+  
+  return isValid
+}
+
 
 const handleLogin = async () => {
   error.value = ''
+  
+  // 验证表单
+  if (!validateForm()) {
+    return
+  }
+  
   loading.value = true
   
   try {
@@ -29,7 +64,7 @@ const handleLogin = async () => {
     
     // 检查后端返回的业务码
     const data = response.data
-    if (data.code === 200) {
+    if (data.code === '0') {
       // 保存token到本地存储
       const token = data.data?.token || data.token
       const userInfo = data.data || data
@@ -50,12 +85,26 @@ const handleLogin = async () => {
       }
     } else {
       // 显示后端返回的错误信息
-      error.value = data.message || data.msg || '登录失败'
+      error.value = data.message || '用户名或密码错误'
       console.log('Login failed:', data.message || data.msg)
+      console.log('Full error response:', data)
     }
   } catch (err) {
-    error.value = err.message || '网络错误'
     console.log('Login error:', err)
+    if (err.response) {
+      // 服务器返回错误
+      console.log('Error response data:', err.response.data)
+      console.log('Error response status:', err.response.status)
+      const errorData = err.response.data
+      // 后端返回的错误信息在 message 字段
+      error.value = errorData.message || '用户名或密码错误'
+    } else if (err.request) {
+      // 请求已发出但没有收到响应
+      error.value = '网络错误，请检查后端服务是否正常'
+    } else {
+      // 其他错误
+      error.value = err.message || '登录失败，请稍后重试'
+    }
   } finally {
     loading.value = false
   }
@@ -68,7 +117,7 @@ const handleLogin = async () => {
     
     <div class="login-content">
       <div class="form-group">
-        <div class="input-wrapper">
+        <div class="input-wrapper" :class="{ 'error': formErrors.username }">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -82,10 +131,11 @@ const handleLogin = async () => {
             :disabled="loading"
           />
         </div>
+        <div v-if="formErrors.username" class="error-text">{{ formErrors.username }}</div>
       </div>
       
       <div class="form-group">
-        <div class="input-wrapper">
+        <div class="input-wrapper" :class="{ 'error': formErrors.password }">
           <span class="icon">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
@@ -116,6 +166,7 @@ const handleLogin = async () => {
             </svg>
           </button>
         </div>
+        <div v-if="formErrors.password" class="error-text">{{ formErrors.password }}</div>
       </div>
       
 
@@ -271,6 +322,20 @@ const handleLogin = async () => {
   background: rgba(255, 255, 255, 0.15) !important;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.input-wrapper.error {
+  border: 1px solid rgba(255, 100, 100, 0.8) !important;
+  background: rgba(255, 100, 100, 0.1) !important;
+}
+
+.error-text {
+  color: rgba(255, 100, 100, 0.9);
+  font-size: 12px;
+  margin-top: 5px;
+  margin-left: 10px;
+  position: relative;
+  z-index: 11;
 }
 
 .icon {
@@ -452,36 +517,6 @@ html, body {
 .login-button {
   transition: none !important;
   animation: none !important;
-}
-
-/* 解决Chrome等webkit内核浏览器自动填充时的白框问题 */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus,
-input:-webkit-autofill:active {
-  /* 使用透明背景 */
-  background: transparent !important;
-  /* 覆盖默认的白色背景 */
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: white !important;
-  /* 禁用默认的填充样式 */
-  transition: background-color 5000s ease-in-out 0s !important;
-  /* 确保文字颜色保持白色 */
-  color: white !important;
-  /* 确保边框样式一致 */
-  border: none !important;
-  outline: none !important;
-}
-
-/* 确保input-wrapper在自动填充时也保持玻璃态 */
-.input-wrapper:-webkit-autofill,
-.input-wrapper:-webkit-autofill:hover,
-.input-wrapper:-webkit-autofill:focus,
-.input-wrapper:-webkit-autofill:active {
-  background: rgba(255, 255, 255, 0.1) !important;
-  backdrop-filter: blur(5px) !important;
-  -webkit-backdrop-filter: blur(5px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
 }
 
 @media (max-width: 480px) {

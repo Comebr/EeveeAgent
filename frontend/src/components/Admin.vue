@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import UserManagement from './user/UserManagement.vue'
 
 const router = useRouter()
 const userInfo = ref(null)
@@ -191,9 +192,8 @@ const toggleSidebar = () => {
           <h2>知识库管理</h2>
           <p>知识库管理功能开发中...</p>
         </div>
-        <div v-else-if="activeMenu === 'users'" class="page-content">
-          <h2>用户管理</h2>
-          <p>用户管理功能开发中...</p>
+        <div v-else-if="activeMenu === 'users'" class="page-content user-page">
+          <UserManagement />
         </div>
         <div v-else-if="activeMenu === 'settings'" class="page-content">
           <h2>系统设置</h2>
@@ -540,6 +540,13 @@ const toggleSidebar = () => {
 .page-content p {
   font-size: 14px;
   color: #666;
+}
+
+/* 用户管理页面样式 */
+.page-content.user-page {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 /* 响应式设计 */
