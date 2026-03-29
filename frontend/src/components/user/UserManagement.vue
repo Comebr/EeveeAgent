@@ -42,7 +42,8 @@ const formData = reactive({
   username: '',
   password: '',
   role: 'user',
-  avatar: '/avatars/avatar-1.svg'
+  avatar: '/avatars/avatar-1.svg',
+  email: ''
 })
 
 // 表单验证规则
@@ -165,7 +166,8 @@ const handleAdd = () => {
     username: '',
     password: '',
     role: 'user',
-    avatar: '/avatars/avatar-1.svg'
+    avatar: '/avatars/avatar-1.svg',
+    email: ''
   })
   dialogVisible.value = true
 }
@@ -179,7 +181,8 @@ const handleEdit = (row) => {
     username: row.username,
     password: '',
     role: row.role,
-    avatar: row.avatar || '/avatars/avatar-1.svg'
+    avatar: row.avatar || '/avatars/avatar-1.svg',
+    email: row.email || ''
   })
   dialogVisible.value = true
 }
@@ -188,7 +191,8 @@ const handleEdit = (row) => {
 const formErrors = reactive({
   username: '',
   password: '',
-  role: ''
+  role: '',
+  email: ''
 })
 
 // 验证表单
@@ -199,6 +203,7 @@ const validateForm = () => {
   formErrors.username = ''
   formErrors.password = ''
   formErrors.role = ''
+  formErrors.email = ''
   
   // 验证用户名
   if (!formData.username.trim()) {
@@ -216,6 +221,15 @@ const validateForm = () => {
   if (!formData.role) {
     formErrors.role = '请选择角色'
     isValid = false
+  }
+  
+  // 验证邮箱（如果填写）
+  if (formData.email.trim()) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(formData.email.trim())) {
+      formErrors.email = '邮箱格式不正确'
+      isValid = false
+    }
   }
   
   return isValid
@@ -399,13 +413,13 @@ onMounted(() => {
             <td>{{ formatDate(row.updateTime) }}</td>
             <td>
               <div class="action-btns">
-                <button v-if="row.username !== 'admin'" class="btn-icon btn-edit" @click="handleEdit(row)" title="编辑">
+                <button class="btn-icon btn-edit" @click="handleEdit(row)" title="编辑" :disabled="row.username === 'admin'">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                   </svg>
                 </button>
-                <button v-if="row.username !== 'admin'" class="btn-icon btn-delete" @click="handleDelete(row)" title="删除">
+                <button class="btn-icon btn-delete" @click="handleDelete(row)" title="删除" :disabled="row.username === 'admin'">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="3 6 5 6 21 6"/>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -507,6 +521,17 @@ onMounted(() => {
                 <option value="admin">管理员</option>
               </select>
               <div v-if="formErrors.role" class="error-text">{{ formErrors.role }}</div>
+            </div>
+
+            <div class="form-item">
+              <label>邮箱</label>
+              <input 
+                v-model="formData.email" 
+                type="email" 
+                placeholder="请输入邮箱（选填）"
+                :class="{ 'error': formErrors.email }"
+              />
+              <div v-if="formErrors.email" class="error-text">{{ formErrors.email }}</div>
             </div>
           </form>
         </div>
@@ -629,6 +654,16 @@ onMounted(() => {
   border: none;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+.btn-icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-icon:disabled:hover {
+  background: transparent;
+  color: inherit;
 }
 
 .btn-edit {

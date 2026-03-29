@@ -1,17 +1,40 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import MarkdownRenderer from './MarkdownRenderer.vue'
 
 const router = useRouter()
 const userInfo = ref(null)
 const showUserMenu = ref(false)
 const sidebarCollapsed = ref(false)
 
+// 消息提示
+const showMessage = ref(false)
+const messageText = ref('')
+const messageType = ref('success') // success, error, info
+
+// 显示消息
+const showToast = (text, type = 'success', duration = 3000) => {
+  messageText.value = text
+  messageType.value = type
+  showMessage.value = true
+  
+  setTimeout(() => {
+    showMessage.value = false
+  }, duration)
+}
+
+// 聊天相关状态
+const messages = ref([])
+const inputText = ref('')
+const isLoading = ref(false)
+const chatContentRef = ref(null)
+
 // 实时获取用户信息
 const fetchUserInfo = async () => {
   try {
-    const response = await axios.get('/api/user/current')
+    const response = await axios.get('/api/management/current')
     if (response.data.code === '0') {
       userInfo.value = response.data.data
       // 更新本地存储
@@ -27,16 +50,440 @@ const fetchUserInfo = async () => {
   }
 }
 
+// 滚动到聊天底部
+const scrollToBottom = async () => {
+  await nextTick()
+  if (chatContentRef.value) {
+    chatContentRef.value.scrollTop = chatContentRef.value.scrollHeight
+  }
+}
+
+// 发送消息
+const sendMessage = async () => {
+  if (!inputText.value.trim()) return
+  
+  // 添加用户消息
+  const userMessage = {
+    id: Date.now(),
+    content: inputText.value.trim(),
+    role: 'user',
+    timestamp: new Date().toISOString()
+  }
+  messages.value.push(userMessage)
+  inputText.value = ''
+  
+  // 滚动到底部
+  await scrollToBottom()
+  
+  // 添加AI正在思考的消息
+  const aiThinkingMessage = {
+    id: Date.now() + 1,
+    content: '🤔 正在思考中...',
+    role: 'assistant',
+    timestamp: new Date().toISOString(),
+    isThinking: true
+  }
+  messages.value.push(aiThinkingMessage)
+  
+  // 滚动到底部
+  await scrollToBottom()
+  
+  try {
+    const token = localStorage.getItem('token')
+    const url = `/agent/ceshi/streamingChat?prompt=${encodeURIComponent(userMessage.content)}`
+    
+    const eventSource = new EventSource(url)
+    
+    let buffer = ''
+    let displayContent = ''
+    let firstDataReceived = false
+    let isComplete = false
+    let outputTimer = null
+    
+    const startSmoothOutput = () => {
+        const CHAR_PER_INTERVAL = 2
+        const INTERVAL_MS = 30
+        
+        outputTimer = setInterval(() => {
+          if (buffer.length > 0) {
+            const charsToAdd = Math.min(buffer.length, CHAR_PER_INTERVAL)
+            displayContent += buffer.substring(0, charsToAdd)
+            buffer = buffer.substring(charsToAdd)
+            
+            // 流式输出过程中使用临时内容，避免频繁更新导致代码高亮闪烁
+            const msgIndex = messages.value.findIndex(msg => msg.id === aiThinkingMessage.id)
+            if (msgIndex !== -1) {
+              messages.value[msgIndex] = {
+                ...messages.value[msgIndex],
+                content: displayContent,
+                isStreaming: true
+              }
+            }
+            nextTick(() => {
+              scrollToBottom()
+            })
+          } else if (isComplete) {
+            clearInterval(outputTimer)
+            outputTimer = null
+          }
+        }, INTERVAL_MS)
+        
+        // 存储定时器以便清理
+        if (!window.__chatTimers) {
+          window.__chatTimers = []
+        }
+        window.__chatTimers.push(outputTimer)
+      }
+    
+    eventSource.onmessage = (event) => {
+        if (!firstDataReceived) {
+          firstDataReceived = true
+          const msgIndex = messages.value.findIndex(msg => msg.id === aiThinkingMessage.id)
+          if (msgIndex !== -1) {
+            messages.value[msgIndex] = {
+              ...messages.value[msgIndex],
+              isThinking: false,
+              isStreaming: true,
+              content: ''
+            }
+          }
+          startSmoothOutput()
+        }
+        
+        buffer += event.data
+      }
+      
+      eventSource.onerror = (error) => {
+        console.error('SSE连接错误:', error)
+        eventSource.close()
+        isComplete = true
+        // 等待缓冲区数据处理完成后再清理定时器和标记结束
+        const checkBuffer = () => {
+          if (buffer.length === 0) {
+            if (outputTimer) {
+              clearInterval(outputTimer)
+              outputTimer = null
+            }
+            const msgIndex = messages.value.findIndex(msg => msg.id === aiThinkingMessage.id)
+            if (msgIndex !== -1) {
+              // 一次性更新最终内容，确保代码高亮和语言显示正确
+              messages.value[msgIndex] = {
+                ...messages.value[msgIndex],
+                isStreaming: false,
+                content: displayContent
+              }
+            }
+          } else {
+            // 继续等待缓冲区处理
+            setTimeout(checkBuffer, 50)
+          }
+        }
+        checkBuffer()
+        if (!firstDataReceived) {
+          messages.value = messages.value.filter(msg => !msg.isThinking)
+          messages.value.push({
+            id: Date.now() + 3,
+            content: '抱歉，处理您的请求时出现错误，请稍后重试。',
+            role: 'assistant',
+            timestamp: new Date().toISOString()
+          })
+          nextTick(() => {
+            scrollToBottom()
+          })
+        }
+      }
+      
+      eventSource.addEventListener('close', () => {
+        eventSource.close()
+        isComplete = true
+        // 等待缓冲区数据处理完成后再标记流式传输结束
+        const checkBuffer = () => {
+          if (buffer.length === 0) {
+            if (outputTimer) {
+              clearInterval(outputTimer)
+              outputTimer = null
+            }
+            const msgIndex = messages.value.findIndex(msg => msg.id === aiThinkingMessage.id)
+            if (msgIndex !== -1) {
+              // 一次性更新最终内容，确保代码高亮和语言显示正确
+              messages.value[msgIndex] = {
+                ...messages.value[msgIndex],
+                isStreaming: false,
+                content: displayContent
+              }
+            }
+          } else {
+            // 继续等待缓冲区处理
+            setTimeout(checkBuffer, 50)
+          }
+        }
+        checkBuffer()
+      })
+    
+  } catch (error) {
+    console.error('聊天请求失败:', error)
+    messages.value = messages.value.filter(msg => !msg.isThinking)
+    messages.value.push({
+      id: Date.now() + 3,
+      content: '抱歉，处理您的请求时出现错误，请稍后重试。',
+      role: 'assistant',
+      timestamp: new Date().toISOString()
+    })
+    await scrollToBottom()
+  }
+}
+
+// 重新生成回答
+const regenerateResponse = async (message) => {
+  // 前端实现：重新发送上一条用户消息
+  const userMessages = messages.value.filter(msg => msg.role === 'user')
+  if (userMessages.length > 0) {
+    const lastUserMessage = userMessages[userMessages.length - 1]
+    
+    // 标记当前消息为思考中
+    const msgIndex = messages.value.findIndex(msg => msg.id === message.id)
+    if (msgIndex !== -1) {
+      messages.value[msgIndex] = {
+        ...messages.value[msgIndex],
+        isThinking: true,
+        content: '',
+        isStreaming: false
+      }
+      await scrollToBottom()
+    }
+    
+    // 直接发送请求，不添加新消息
+    try {
+      const token = localStorage.getItem('token')
+      const url = `/agent/ceshi/streamingChat?prompt=${encodeURIComponent(lastUserMessage.content)}`
+      
+      const eventSource = new EventSource(url)
+      
+      let buffer = ''
+      let displayContent = ''
+      let firstDataReceived = false
+      let isComplete = false
+      let outputTimer = null
+      
+      const startSmoothOutput = () => {
+        const CHAR_PER_INTERVAL = 2
+        const INTERVAL_MS = 30
+        
+        outputTimer = setInterval(() => {
+          if (buffer.length > 0) {
+            const charsToAdd = Math.min(buffer.length, CHAR_PER_INTERVAL)
+            displayContent += buffer.substring(0, charsToAdd)
+            buffer = buffer.substring(charsToAdd)
+            
+            // 流式输出过程中使用临时内容，避免频繁更新导致代码高亮闪烁
+            const msgIndex = messages.value.findIndex(msg => msg.id === message.id)
+            if (msgIndex !== -1) {
+              messages.value[msgIndex] = {
+                ...messages.value[msgIndex],
+                content: displayContent,
+                isStreaming: true
+              }
+            }
+            nextTick(() => {
+              scrollToBottom()
+            })
+          } else if (isComplete) {
+            clearInterval(outputTimer)
+            outputTimer = null
+          }
+        }, INTERVAL_MS)
+        
+        // 存储定时器以便清理
+        if (!window.__chatTimers) {
+          window.__chatTimers = []
+        }
+        window.__chatTimers.push(outputTimer)
+      }
+      
+      eventSource.onmessage = (event) => {
+        if (!firstDataReceived) {
+          firstDataReceived = true
+          const msgIndex = messages.value.findIndex(msg => msg.id === message.id)
+          if (msgIndex !== -1) {
+            messages.value[msgIndex] = {
+              ...messages.value[msgIndex],
+              isThinking: false,
+              isStreaming: true,
+              content: ''
+            }
+          }
+          startSmoothOutput()
+        }
+        
+        buffer += event.data
+      }
+      
+      eventSource.onerror = (error) => {
+        console.error('SSE连接错误:', error)
+        eventSource.close()
+        isComplete = true
+        // 等待缓冲区数据处理完成后再清理定时器和标记结束
+        const checkBuffer = () => {
+          if (buffer.length === 0) {
+            if (outputTimer) {
+              clearInterval(outputTimer)
+              outputTimer = null
+            }
+            const msgIndex = messages.value.findIndex(msg => msg.id === message.id)
+            if (msgIndex !== -1) {
+              // 一次性更新最终内容，确保代码高亮和语言显示正确
+              messages.value[msgIndex] = {
+                ...messages.value[msgIndex],
+                isStreaming: false,
+                content: displayContent
+              }
+            }
+          } else {
+            // 继续等待缓冲区处理
+            setTimeout(checkBuffer, 50)
+          }
+        }
+        checkBuffer()
+        if (!firstDataReceived) {
+          const msgIndex = messages.value.findIndex(msg => msg.id === message.id)
+          if (msgIndex !== -1) {
+            messages.value[msgIndex] = {
+              ...messages.value[msgIndex],
+              isThinking: false,
+              isStreaming: false,
+              content: '抱歉，处理您的请求时出现错误，请稍后重试。'
+            }
+          }
+          nextTick(() => {
+            scrollToBottom()
+          })
+        }
+      }
+      
+      eventSource.addEventListener('close', () => {
+        eventSource.close()
+        isComplete = true
+        // 等待缓冲区数据处理完成后再标记流式传输结束
+        const checkBuffer = () => {
+          if (buffer.length === 0) {
+            if (outputTimer) {
+              clearInterval(outputTimer)
+              outputTimer = null
+            }
+            const msgIndex = messages.value.findIndex(msg => msg.id === message.id)
+            if (msgIndex !== -1) {
+              // 一次性更新最终内容，确保代码高亮和语言显示正确
+              messages.value[msgIndex] = {
+                ...messages.value[msgIndex],
+                isStreaming: false,
+                content: displayContent
+              }
+            }
+          } else {
+            // 继续等待缓冲区处理
+            setTimeout(checkBuffer, 50)
+          }
+        }
+        checkBuffer()
+      })
+      
+    } catch (error) {
+      console.error('聊天请求失败:', error)
+      const msgIndex = messages.value.findIndex(msg => msg.id === message.id)
+      if (msgIndex !== -1) {
+        messages.value[msgIndex] = {
+          ...messages.value[msgIndex],
+          isThinking: false,
+          isStreaming: false,
+          content: '抱歉，处理您的请求时出现错误，请稍后重试。'
+        }
+      }
+      await scrollToBottom()
+    }
+  }
+}
+
+// 复制消息
+const copyMessage = async (message) => {
+  try {
+    await navigator.clipboard.writeText(message.content)
+    // 标记为已复制
+    const msgIndex = messages.value.findIndex(msg => msg.id === message.id)
+    if (msgIndex !== -1) {
+      messages.value[msgIndex] = {
+        ...messages.value[msgIndex],
+        copied: true
+      }
+      // 3秒后恢复原样
+      setTimeout(() => {
+        const msgIndex = messages.value.findIndex(msg => msg.id === message.id)
+        if (msgIndex !== -1) {
+          messages.value[msgIndex] = {
+            ...messages.value[msgIndex],
+            copied: false
+          }
+        }
+      }, 3000)
+    }
+  } catch (error) {
+    console.error('复制失败:', error)
+  }
+}
+
+// 点赞
+const toggleLike = (message) => {
+  const msgIndex = messages.value.findIndex(msg => msg.id === message.id)
+  if (msgIndex !== -1) {
+    messages.value[msgIndex] = {
+      ...messages.value[msgIndex],
+      liked: !messages.value[msgIndex].liked,
+      disliked: false // 点赞时取消点踩
+    }
+  }
+}
+
+// 点踩
+const toggleDislike = (message) => {
+  const msgIndex = messages.value.findIndex(msg => msg.id === message.id)
+  if (msgIndex !== -1) {
+    messages.value[msgIndex] = {
+      ...messages.value[msgIndex],
+      disliked: !messages.value[msgIndex].disliked,
+      liked: false // 点踩时取消点赞
+    }
+  }
+}
+
+// 处理输入框回车事件
+const handleKeyPress = (event) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    sendMessage()
+  }
+}
+
 onMounted(() => {
   // 实时获取用户信息
   fetchUserInfo()
   
   // 点击外部关闭菜单
   document.addEventListener('click', handleClickOutside)
+  
+  // 登录成功后显示消息
+const showLoginSuccess = localStorage.getItem('showLoginSuccess') === 'true'
+if (showLoginSuccess) {
+  showToast('已成功登录', 'success')
+  localStorage.removeItem('showLoginSuccess')
+}
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  
+  // 清理所有可能的定时器
+  const timers = window.__chatTimers || []
+  timers.forEach(timer => clearInterval(timer))
+  window.__chatTimers = []
 })
 
 const handleClickOutside = (event) => {
@@ -50,6 +497,7 @@ const handleLogout = () => {
   // 清除本地存储
   localStorage.removeItem('token')
   localStorage.removeItem('userInfo')
+  localStorage.setItem('showLogoutSuccess', 'true')
   // 跳转到登录页
   window.location.href = '/'
 }
@@ -69,6 +517,26 @@ const goToAdmin = () => {
 
 <template>
   <div class="home-container">
+    <!-- 消息提示 -->
+    <div v-if="showMessage" :class="['toast-message', messageType]">
+      <div class="toast-content">
+        <svg v-if="messageType === 'success'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <svg v-else-if="messageType === 'error'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="16" x2="12" y2="12"/>
+          <line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+        <span>{{ messageText }}</span>
+      </div>
+    </div>
+    
     <!-- 侧边栏 -->
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <!-- Logo区域 -->
@@ -98,35 +566,6 @@ const goToAdmin = () => {
               </svg>
             </span>
             <span class="menu-text" v-show="!sidebarCollapsed">AI 对话</span>
-          </div>
-          <div class="menu-item" :class="{ collapsed: sidebarCollapsed }">
-            <span class="menu-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                <line x1="8" y1="21" x2="16" y2="21"/>
-                <line x1="12" y1="17" x2="12" y2="21"/>
-              </svg>
-            </span>
-            <span class="menu-text" v-show="!sidebarCollapsed">AI 生成视频</span>
-          </div>
-          <div class="menu-item" :class="{ collapsed: sidebarCollapsed }">
-            <span class="menu-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-            </span>
-            <span class="menu-text" v-show="!sidebarCollapsed">AI 生成图片</span>
-          </div>
-          <div class="menu-item" :class="{ collapsed: sidebarCollapsed }">
-            <span class="menu-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="16 18 22 12 16 6"/>
-                <polyline points="8 6 2 12 8 18"/>
-              </svg>
-            </span>
-            <span class="menu-text" v-show="!sidebarCollapsed">AI 生成代码</span>
           </div>
         </div>
       </div>
@@ -216,8 +655,9 @@ const goToAdmin = () => {
       
       <!-- 聊天区域 -->
       <div class="chat-container">
-        <div class="chat-content">
-          <div class="welcome-message">
+        <div class="chat-content" ref="chatContentRef">
+          <!-- 消息列表 -->
+          <div v-if="messages.length === 0" class="welcome-message">
             <div class="robot-icon">
               <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
                 <circle cx="40" cy="40" r="36" fill="#EEF2FF"/>
@@ -234,12 +674,96 @@ const goToAdmin = () => {
               <p class="question">今天需要我帮你做点什么吗？</p>
             </div>
           </div>
+          
+          <div v-else class="message-list">
+            <!-- 用户消息 -->
+            <div v-for="message in messages" :key="message.id" :class="['message-item', message.role]">
+              <div v-if="message.role === 'user'" class="user-message">
+                <div class="message-content">{{ message.content }}</div>
+                <div class="message-avatar">
+                  <div class="avatar">
+                    <img v-if="userInfo?.avatar" :src="userInfo.avatar" alt="avatar" />
+                    <span v-else>{{ userInfo?.username?.charAt(0).toUpperCase() || 'U' }}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div v-else class="ai-message">
+                <div class="message-avatar">
+                  <div class="ai-avatar" style="background-color: #667eea; border-radius: 50%; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                      <line x1="8" y1="21" x2="16" y2="21"/>
+                      <line x1="12" y1="17" x2="12" y2="21"/>
+                    </svg>
+                  </div>
+                </div>
+                <div class="message-bubble">
+                  <div v-if="message.isThinking" class="thinking-indicator">
+                    <div class="thinking-dots">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                    <span class="thinking-text">正在思考...</span>
+                  </div>
+                  <div v-else class="message-content markdown-wrapper">
+                    <MarkdownRenderer 
+                      :content="message.content" 
+                      :is-streaming="message.isStreaming"
+                    />
+                  </div>
+                  
+                  <!-- AI消息操作按钮 -->
+                  <div v-if="!message.isThinking" class="message-actions">
+                    <button class="action-btn" title="重新生成" @click="regenerateResponse(message)">
+                      <svg width="16" height="16" viewBox="0 0 1024 1024" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M935.005091 459.752727a34.909091 34.909091 0 1 1 49.361454 49.361455l-78.382545 78.382545a34.816 34.816 0 0 1-49.338182 0l-78.405818-78.382545a34.909091 34.909091 0 1 1 49.361455-49.361455l14.801454 14.824728C818.525091 311.738182 678.330182 186.181818 508.928 186.181818c-130.466909 0-250.484364 76.706909-305.710545 195.397818a34.932364 34.932364 0 0 1-63.301819-29.463272C206.522182 208.896 351.418182 116.363636 508.904727 116.363636c210.152727 0 383.534545 159.953455 404.992 364.474182l21.085091-21.085091z m-73.960727 189.021091a34.932364 34.932364 0 0 1 16.965818 46.382546C811.310545 838.353455 666.461091 930.909091 508.951273 930.909091c-210.106182 0-383.534545-159.953455-404.968728-364.497455l-21.108363 21.108364a34.909091 34.909091 0 1 1-49.384727-49.361455l78.42909-78.42909a34.909091 34.909091 0 0 1 49.338182 0l78.382546 78.42909a34.909091 34.909091 0 1 1-49.338182 49.338182l-14.824727-14.801454C199.354182 735.534545 339.549091 861.090909 508.951273 861.090909c130.490182 0 250.507636-76.706909 305.710545-195.397818a34.909091 34.909091 0 0 1 46.382546-16.919273z" fill="#797979" p-id="5070"></path>
+                      </svg>
+                    </button>
+                    <button class="action-btn" title="复制" @click="copyMessage(message)" :class="{ 'copied': message.copied }">
+                      <svg v-if="!message.copied" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                      </svg>
+                      <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    </button>
+                    <button class="action-btn" title="点赞" @click="toggleLike(message)" :class="{ 'active': message.liked }">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                      </svg>
+                    </button>
+                    <button class="action-btn" title="点踩" @click="toggleDislike(message)" :class="{ 'active': message.disliked }">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.28a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z"/>
+                      </svg>
+                    </button>
+                    <button class="action-btn" title="更多">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="1"/>
+                        <circle cx="19" cy="12" r="1"/>
+                        <circle cx="5" cy="12" r="1"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         
         <!-- 输入区域 -->
         <div class="chat-input-area">
           <div class="input-wrapper">
-            <input type="text" placeholder="请输入内容..." />
+            <input 
+              type="text" 
+              v-model="inputText" 
+              placeholder="请输入内容..." 
+              @keypress="handleKeyPress"
+              :disabled="isLoading"
+            />
             <div class="input-actions">
               <button class="action-button">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -259,8 +783,12 @@ const goToAdmin = () => {
                 </svg>
                 <span>上传文档</span>
               </button>
-              <div class="char-count">0/200</div>
-              <button class="send-button">
+              <div class="char-count">{{ inputText.length }}/200</div>
+              <button 
+                class="send-button" 
+                @click="sendMessage"
+                :disabled="isLoading || !inputText.trim()"
+              >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="22" y1="2" x2="11" y2="13"/>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -295,6 +823,58 @@ html, body {
   height: 100vh;
   background-color: #f8f9fa;
   overflow: hidden;
+}
+
+/* 消息提示样式 */
+.toast-message {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  animation: slideDown 0.3s ease-out;
+}
+
+.toast-message.success {
+  background-color: #f0fdf4;
+  border: 1px solid #dcfce7;
+  color: #166534;
+}
+
+.toast-message.error {
+  background-color: #fef2f2;
+  border: 1px solid #fee2e2;
+  color: #b91c1c;
+}
+
+.toast-message.info {
+  background-color: #eff6ff;
+  border: 1px solid #dbeafe;
+  color: #1d4ed8;
+}
+
+.toast-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 /* 侧边栏样式 */
@@ -633,6 +1213,9 @@ html, body {
   flex: 1;
   overflow-y: auto;
   padding: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .welcome-message {
@@ -663,10 +1246,179 @@ html, body {
   color: #666;
 }
 
+/* 消息列表 */
+.message-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 800px;
+}
+
+.message-item {
+  display: block;
+  width: 100%;
+}
+
+/* 用户消息 */
+.user-message {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  justify-content: flex-end;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.user-message .message-content {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 12px 16px;
+  border-radius: 18px 18px 4px 18px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  max-width: 80%;
+}
+
+.user-message .message-avatar {
+  display: flex;
+  align-items: flex-end;
+}
+
+/* AI消息 */
+.ai-message {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-start;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.ai-message .message-avatar {
+  display: flex;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+
+.ai-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.message-bubble {
+  flex: 1;
+  max-width: calc(100% - 60px);
+}
+
+.markdown-wrapper {
+  background-color: white;
+  border: 1px solid #e8e8e8;
+  padding: 20px 24px;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* 思考中动画 */
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background-color: #f8f9fa;
+  border-radius: 12px;
+  width: fit-content;
+}
+
+.thinking-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.thinking-dots span {
+  width: 8px;
+  height: 8px;
+  background-color: #667eea;
+  border-radius: 50%;
+  animation: thinking-bounce 1.4s infinite ease-in-out both;
+}
+
+.thinking-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+.thinking-text {
+  font-size: 14px;
+  color: #666;
+}
+
+/* 消息操作按钮 */
+.message-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  padding-left: 4px;
+}
+
+.action-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background-color: #f5f5f5;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.action-btn:hover {
+  background-color: #e8e8e8;
+  color: #333;
+}
+
+/* 重新生成按钮颜色调整 */
+.action-btn:first-child svg {
+  stroke: #333;
+}
+
+/* 复制成功状态 */
+.action-btn.copied {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+/* 点赞/踩激活状态 */
+.action-btn.active {
+  color: #667eea;
+  background-color: #f0f5ff;
+}
+
 /* 输入区域 */
 .chat-input-area {
   padding: 20px 40px 40px;
   flex-shrink: 0;
+  display: flex;
+  justify-content: center;
 }
 
 .input-wrapper {
@@ -675,6 +1427,8 @@ html, body {
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  max-width: 800px;
 }
 
 .input-wrapper input {

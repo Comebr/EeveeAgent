@@ -1,18 +1,41 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import axios from 'axios'
 
 const emit = defineEmits(['login-success'])
 
 const form = reactive({
-  username: '',
-  password: '',
-  remember: false
+  username: localStorage.getItem('rememberedUsername') || '',
+  password: localStorage.getItem('rememberedPassword') || '',
+  remember: localStorage.getItem('rememberedUsername') ? true : false
 })
 
 const loading = ref(false)
 const error = ref('')
 const showPassword = ref(false)
+const showMessage = ref(false)
+const messageText = ref('')
+const messageType = ref('success')
+
+// 显示消息
+const showToast = (text, type = 'success', duration = 3000) => {
+  messageText.value = text
+  messageType.value = type
+  showMessage.value = true
+  
+  setTimeout(() => {
+    showMessage.value = false
+  }, duration)
+}
+
+onMounted(() => {
+  // 显示退出登录成功消息
+  const showLogoutSuccess = localStorage.getItem('showLogoutSuccess') === 'true'
+  if (showLogoutSuccess) {
+    showToast('已成功退出', 'success')
+    localStorage.removeItem('showLogoutSuccess')
+  }
+})
 
 // 表单验证错误
 const formErrors = reactive({
@@ -74,6 +97,19 @@ const handleLogin = async () => {
       if (token) {
         localStorage.setItem('token', token)
         localStorage.setItem('userInfo', JSON.stringify(userInfo))
+        
+        // 处理记住密码
+        if (form.remember) {
+          localStorage.setItem('rememberedUsername', form.username)
+          localStorage.setItem('rememberedPassword', form.password)
+        } else {
+          localStorage.removeItem('rememberedUsername')
+          localStorage.removeItem('rememberedPassword')
+        }
+        
+        // 设置登录成功标志
+        localStorage.setItem('showLoginSuccess', 'true')
+        
         console.log('Token saved to localStorage')
         // 直接跳转，不依赖事件触发
         setTimeout(() => {
@@ -113,6 +149,26 @@ const handleLogin = async () => {
 
 <template>
   <div class="login-container">
+    <!-- 消息提示 -->
+    <div v-if="showMessage" :class="['toast-message', messageType]">
+      <div class="toast-content">
+        <svg v-if="messageType === 'success'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <svg v-else-if="messageType === 'error'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="16" x2="12" y2="12"/>
+          <line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+        <span>{{ messageText }}</span>
+      </div>
+    </div>
+    
     <h2>欢迎使用 EeveeAgent!</h2>
     
     <div class="login-content">
@@ -488,6 +544,58 @@ input:checked + .slider:before {
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+/* 消息提示样式 */
+.toast-message {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  animation: slideDown 0.3s ease-out;
+}
+
+.toast-message.success {
+  background-color: #f0fdf4;
+  border: 1px solid #dcfce7;
+  color: #166534;
+}
+
+.toast-message.error {
+  background-color: #fef2f2;
+  border: 1px solid #fee2e2;
+  color: #b91c1c;
+}
+
+.toast-message.info {
+  background-color: #eff6ff;
+  border: 1px solid #dbeafe;
+  color: #1d4ed8;
+}
+
+.toast-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 /* 全局样式重置，确保没有其他样式干扰 */
