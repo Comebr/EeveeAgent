@@ -1,4 +1,4 @@
-package com.azheng.boot.user.Do;
+package com.azheng.boot.user.databaseobject;
 
 
 import com.baomidou.mybatisplus.annotation.*;
@@ -18,7 +18,7 @@ import java.util.Date;
 @AllArgsConstructor
 @NoArgsConstructor
 @TableName(value = "user")
-public class UserDo {
+public class UserDO {
     //
 
     @TableId(type = IdType.AUTO)

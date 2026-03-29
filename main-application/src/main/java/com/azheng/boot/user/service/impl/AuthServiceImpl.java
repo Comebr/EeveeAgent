@@ -2,13 +2,12 @@ package com.azheng.boot.user.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.util.StrUtil;
-import com.azheng.boot.user.Do.UserDo;
-import com.azheng.boot.user.dto.LoginDto;
-import com.azheng.boot.user.mapper.userMapper;
+import com.azheng.boot.user.databaseobject.UserDO;
+import com.azheng.boot.user.mapper.UserMapper;
+import com.azheng.boot.user.request.LoginRequest;
 import com.azheng.boot.user.service.AuthService;
-import com.azheng.boot.user.vo.LoginVo;
+import com.azheng.boot.user.vo.LoginVO;
 import com.azheng.framework.exception.ClientException;
-import com.azheng.framework.errorcode.BaseErrorCode;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,23 +15,22 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
-
-    private final userMapper userMapper;
+    private final UserMapper userMapper;
     public static final String DEFAULT_AVATAR = "static/default-avatar.png";
 
 
     /**
      * 用户登录
-     * @param loginDTO
+     * @param loginRequest
      * @return
      */
     @Override
-    public LoginVo login(LoginDto loginDTO) {
-        String username = loginDTO.getUsername();
-        String password = loginDTO.getPassword();
+    public LoginVO login(LoginRequest loginRequest) {
+        String username = loginRequest.getUsername();
+        String password = loginRequest.getPassword();
 
         // 根据用户名获取用户信息
-        UserDo user = getUserByName(username);
+        UserDO user = getUserByName(username);
         // 校验
         if(user == null || !user.getPassword().equals(password)) {
             throw new ClientException( "用户名或密码错误！");
@@ -47,7 +45,7 @@ public class AuthServiceImpl implements AuthService {
         //用户头像头像预设
         String avatar = StrUtil.isBlank(user.getAvatar()) ? DEFAULT_AVATAR : user.getAvatar();
 
-        return new LoginVo(loginId,user.getRole(),StpUtil.getTokenValue(),avatar);
+        return new LoginVO(loginId, user.getUsername(), user.getRole(), StpUtil.getTokenValue(), avatar);
     }
 
     /**
@@ -64,14 +62,14 @@ public class AuthServiceImpl implements AuthService {
      * @param username
      * @return
      */
-    public UserDo getUserByName(String username) {
+    public UserDO getUserByName(String username) {
         if(username == null || "".equals(username)){
             return null;
         }
         return userMapper.selectOne(
-                Wrappers.lambdaQuery(UserDo.class)
-                        .eq(UserDo::getUsername, username)
-                        .eq(UserDo::getStatus, 1)
+                Wrappers.lambdaQuery(UserDO.class)
+                        .eq(UserDO::getUsername, username)
+                        .eq(UserDO::getStatus, 1)
         );
     }
 

@@ -1,7 +1,7 @@
 package com.azheng.boot.user.service;
 
-import com.azheng.boot.user.dto.LoginDto;
-import com.azheng.boot.user.vo.LoginVo;
+import com.azheng.boot.user.request.LoginRequest;
+import com.azheng.boot.user.vo.LoginVO;
 
 /**
  * 定义用户登录相关的各种方法
@@ -9,7 +9,7 @@ import com.azheng.boot.user.vo.LoginVo;
 public interface AuthService{
     //    ——————————————————登录界面方法——————————————————
     //用户登录
-    LoginVo login(LoginDto loginDTO);
+    LoginVO login(LoginRequest loginRequest);
 
     //退出登录
     void loginOut();

@@ -1,48 +1,87 @@
 package com.azheng.boot.user.controller;
 
+import cn.dev33.satoken.stp.StpUtil;
+import com.azheng.boot.user.request.ChangePasswordRequest;
+import com.azheng.boot.user.request.CreateUserRequest;
+import com.azheng.boot.user.request.UserPageQueryRequest;
+import com.azheng.boot.user.request.UserUpdateRequest;
+import com.azheng.boot.user.service.UserService;
+import com.azheng.boot.user.vo.CurrentUserVO;
+import com.azheng.boot.user.vo.UserVO;
+import com.azheng.framework.context.LoginUser;
+import com.azheng.framework.context.UserContext;
 import com.azheng.framework.web.Result;
 import com.azheng.framework.web.Results;
-import com.azheng.boot.user.util.FileUploadUtils;
-import com.azheng.framework.exception.ClientException;
-import com.azheng.framework.errorcode.BaseErrorCode;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.multipart.MultipartFile;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-import java.util.Arrays;
+/**
+ * 管理后台-用户管理CRUD
+ */
 @RestController
-@RequestMapping("/api/user")
+@RequestMapping("/api/management")
 public class UserController {
-    @Value("${file.upload.path}")
-    private String uploadPath;
+    @Autowired
+    private  UserService userService;
 
-    @Value("${file.upload.allowed-types}")
-    private String allowedTypes;
+    @PostMapping("/pageQuery")
+    public Result<IPage<UserVO>> userPageQuery(UserPageQueryRequest userPageQueryRequest) {
+        StpUtil.checkRole("admin");
+       return Results.success(userService.pageQuery(userPageQueryRequest));
+    }
 
-    @Value("${file.upload.max-size}")
-    private long maxSize;
+    /**
+     * 获取当前登录用户信息
+     */
+    @GetMapping("/current")
+    public Result<CurrentUserVO> currentUser() {
+        LoginUser user = UserContext.requireUser();
+        return Results.success(new CurrentUserVO(
+                user.getUserId(),
+                user.getUsername(),
+                user.getRole(),
+                user.getAvatar()
+        ));
+    }
 
-    @PostMapping("/avatar/upload")
-    public Result<String> uploadAvatar(@RequestParam("file") MultipartFile file) throws IOException {
-        // 检查文件类型
-        String contentType = file.getContentType();
-        if (!Arrays.asList(allowedTypes.split(",")).contains(contentType)) {
-            throw new ClientException( "不支持的文件类型");
-        }
+    /**
+     * 创建用户
+     * @param createUserRequest
+     * @return
+     */
+    @PostMapping("/create")
+    public Result<Boolean> createUser(@RequestBody CreateUserRequest createUserRequest) {
+        StpUtil.checkRole("admin");
+        return Results.success(userService.createUser(createUserRequest));
+    }
 
-        // 检查文件大小
-        if (file.getSize() > maxSize) {
-            throw new ClientException("文件大小超过限制");
-        }
+    /**
+     * 更新用户
+     */
+    @PutMapping("/users/{id}")
+    public Result<Void> update(@PathVariable String id, @RequestBody UserUpdateRequest requestParam) {
+        StpUtil.checkRole("admin");
+        userService.update(id, requestParam);
+        return Results.success();
+    }
 
-        // 上传文件
-        String filename = FileUploadUtils.upload(file, uploadPath);
+    /**
+     * 删除用户
+     */
+    @DeleteMapping("/users/{id}")
+    public Result<Void> delete(@PathVariable String id) {
+        StpUtil.checkRole("admin");
+        userService.delete(id);
+        return Results.success();
+    }
 
-        // 返回文件路径
-        return Results.success("/uploads/avatar/" + filename);
+    /**
+     * 修改当前用户密码
+     */
+    @PutMapping("/password")
+    public Result<Void> changePassword(@RequestBody ChangePasswordRequest requestParam) {
+        userService.changePassword(requestParam);
+        return Results.success();
     }
 }

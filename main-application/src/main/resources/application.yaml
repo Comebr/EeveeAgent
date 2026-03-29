@@ -41,9 +41,3 @@ mybatis-plus:
   type-aliases-package: com.azheng.framework.user.entity
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-# 自定义图片上传配置
-file:
-  upload:
-    path: ./uploads/avatar/
-    allowed-types: image/jpeg,image/png,image/gif,image/webp
-    max-size: 5242880  # 5MB

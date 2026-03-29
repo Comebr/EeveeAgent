@@ -4,15 +4,21 @@ import cn.dev33.satoken.interceptor.SaInterceptor;
 import cn.dev33.satoken.stp.StpUtil;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
-import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
+@RequiredArgsConstructor
 public class SaTokenConfig implements WebMvcConfigurer {
+
+    /**
+     * 用户上下文拦截器
+     */
+    private final UserContextInterceptor userContextInterceptor;
 
    /**
     * 注册 Sa-Token 拦截器，打开注解式鉴权功能
@@ -44,13 +50,15 @@ public class SaTokenConfig implements WebMvcConfigurer {
               .addPathPatterns("/**")
               // 排除认证相关路径和错误页面
               .excludePathPatterns("/api/auth/**", "/error");
+
+
+       // 注册用户上下文拦截器
+       registry.addInterceptor(userContextInterceptor)
+               // 拦截所有路径
+               .addPathPatterns("/**")
+               // 排除认证相关路径和错误页面
+               .excludePathPatterns("/api/auth/**", "/error");
    }
 
-    @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 映射静态资源
-        registry.addResourceHandler("/uploads/**")
-                .addResourceLocations("file:" + System.getProperty("user.dir") + "/uploads/");
-    }
 
 }
