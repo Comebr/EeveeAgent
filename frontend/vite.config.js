@@ -16,6 +16,11 @@ export default defineConfig({
         target: 'http://localhost:9090',
         changeOrigin: true,
         secure: false
+      },
+      '/kb': {
+        target: 'http://localhost:9090',
+        changeOrigin: true,
+        secure: false
       }
     },
     strictPort: true
