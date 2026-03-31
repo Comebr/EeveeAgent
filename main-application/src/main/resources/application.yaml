@@ -24,9 +24,10 @@ spring:
   application:
     name: core-framework
   servlet:
+    # --文件上传大小限制
     multipart:
-      max-file-size: 5MB
-      max-request-size: 10MB
+      max-file-size: 50MB
+      max-request-size: 100MB
 
   #---MySQL数据配置---(暂定本地数据库、可迁移至docker)
   datasource:
@@ -47,31 +48,39 @@ mybatis-plus:
 langchain4j:
   #---百炼平台-通义千问核心配置---
   community:
-    dashscope:
-#      #--默认文本模型
-#      chat-model:
-#        api-key: ${BAILIAN_API_KEY}
-#        model-name: qwen-flash
-#        max-tokens: 2000
-#
-#      #--向量模型
-#      embedding-model:
-#        api-key: ${BAILIAN_API_KEY}
-#        model-name: text-embedding-v4
-#        dimension: 1024
-
-  #OpenAI
+  # --OpenAI
   open-ai:
-    #流式输出模型 qwen-flash
+    # -流式输出模型 qwen-flash
     streaming-chat-model:
       api-key: ${BAILIAN_API_KEY}
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       model-name: qwen-flash
 
-    #文本向量模型 text-embedding-v4
+    # -文本向量模型 text-embedding-v4
     embedding-model:
       api-key: ${BAILIAN_API_KEY}
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       model-name: text-embedding-v4
+      dimensions: 4096
+
+#---Milvus 向量数据库配置---
+milvus:
+  uri: http://192.168.191.128:19530
+
+
+#---RustFS 对象存储配置---
+rustfs:
+  url: http://192.168.191.128:9000
+  # --账号密码
+  access-key-id: rustfsadmin
+  secret-access-key: rustfsadmin
+
+#---RAG 向量库基础配置---
+rag:
+  default:
+    collection-name: rag_default_store   # Milvus 集合名（知识库表）
+    dimension: 4096                     # 向量维度 → 必须和 embedding 模型一致
+    metric-type: COSINE                 # 相似度算法（余弦相似度，正确）
+
 
 

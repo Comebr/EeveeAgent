@@ -6,7 +6,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
 
 @SpringBootApplication
-@MapperScan("com.azheng.boot.user.mapper")
+@MapperScan(basePackages ={
+        "com.azheng.boot.user.mapper",
+        "com.azheng.boot.kb.dao.mapper"})
 @ComponentScan(basePackages = {"com.azheng.boot", "com.azheng.agent", "com.azheng.framework"})
 public class EeveeApplication {
     public static void main(String[] args) {SpringApplication.run(EeveeApplication.class, args);}
