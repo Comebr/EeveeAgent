@@ -2,7 +2,7 @@ package com.azheng.boot.user.config;
 
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.util.StrUtil;
-import com.azheng.boot.user.databaseobject.UserDO;
+import com.azheng.boot.user.po.UserDO;
 import com.azheng.boot.user.mapper.UserMapper;
 import com.azheng.framework.context.LoginUser;
 import com.azheng.framework.context.UserContext;
