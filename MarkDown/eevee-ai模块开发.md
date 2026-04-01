@@ -485,21 +485,124 @@ public class KnowledgeDocumentPO {
 
 
 
-##### service接口
+##### 写service接口
 
-文档业务所需的功能列表
-
-| 接口名 | 参数 | 功能描述 |
-| :----: | :--: | :------: |
-|        |      |          |
-|        |      |          |
-|        |      |          |
-
-
-
+|     功能     | 接口名       |               参数                |       具体描述       |
+| :----------: | ------------ | :-------------------------------: | :------------------: |
+|   文件上传   | uploadFile   |        MultipartFile file         |  将文件上传到RustFS  |
+|   文件删除   | deleteFile   |           String docId            |  删除文档（逻辑删）  |
+| 文件状态修改 | setEnabled   |   String docId, boolean enabled   |     启用状态开关     |
+|   文件查询   | docPageQuery | PageQueryDocByKbIdRequest request | 分页查询所属文档列表 |
+|   文件下载   |              |                                   |                      |
+|   文件编辑   |              |                                   |                      |
 
 
 
+##### 建Request类
+
+前端->Controller
+
+| 类名              | 字段                        |
+| ----------------- | --------------------------- |
+| uploadFileRequest | MultipartFile multipartFile |
+|                   |                             |
+|                   |                             |
+|                   |                             |
+|                   |                             |
+
+
+
+##### 建VO类：
+
+Controller->前端
+
+| 类名 | 字段 |
+| ---- | ---- |
+|      |      |
+|      |      |
+|      |      |
+|      |      |
+|      |      |
+
+
+
+##### 写Mapper
+
+```java
+package com.azheng.boot.kb.dao.mapper;
+
+import com.azheng.boot.kb.dao.po.KnowledgeDocumentPO;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+
+public interface KnowledgeDocumentMapper extends BaseMapper<KnowledgeDocumentPO> {
+}
+```
+
+
+
+##### 写ServiceImpl
+
+```java
+    /**
+     * 文件上传
+     */
+    @Override
+    public void uploadFile(MultipartFile file, String kbId) {
+        // 1.空值校验
+        Assert.notNull(file ,() -> new ClientException("文件不能为空！"));
+        Assert.notNull(kbId ,() -> new ClientException("知识库ID不能为空！"));
+        String filename = file.getOriginalFilename();
+        // 2.生成唯一key
+        UUID uuid = UUID.randomUUID();
+        String key = "uploadFile/"+uuid+"/"+filename;
+        // 3.构建putObjectRequest
+        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                .bucket(BUCKET_NAME)
+                .key(key)
+                .contentType(file.getContentType())
+                .build();
+        // 4.将InputStream传给RustFS
+        try(InputStream inputStream = file.getInputStream()){
+            RustFsClient.putObject(putObjectRequest, RequestBody.fromInputStream(inputStream, file.getSize()));
+
+            // 5.存储记录进MySQL（fileUrl暂时不设置）
+            KnowledgeDocumentPO documentPO = KnowledgeDocumentPO
+                    .builder()
+                    .documentName(filename)
+                    .fileType(file.getContentType())
+                    .fileSize(file.getSize())
+                    .kbId(Long.valueOf(kbId))
+                    .createBy(UserContext.getUsername())
+                    .build();
+            knowledgeDocumentMapper.insert(documentPO);
+
+            // 6.记录文件映射
+            FileToRustFSLogPO rustFSLogPO = FileToRustFSLogPO.builder()
+                    .docId(documentPO.getId())
+                    .rustfsKey(key)
+                    .build();
+            fileTORustFSLogMapper.insert(rustFSLogPO);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+```
+
+
+
+##### 写Controller
+
+```java
+    @PostMapping("/upload")
+    public Result<Void> upload(@RequestParam("file") MultipartFile file, @RequestParam("kbId") String kbId) {
+        try {
+            knowledgeDocumentService.uploadFile(file, kbId);
+        } catch (Exception e) {
+            return Results.failure();
+        }
+        return Results.success();
+    }
+```
 
 
 
@@ -513,11 +616,7 @@ public class KnowledgeDocumentPO {
 
 
 
-
-
-
-
-#### 03.构建知识块表
+#### 1.4.构建知识块表
 
 得到的文档要交有分割器去分割成若干个知识块chunk
 
@@ -554,21 +653,17 @@ CREATE TABLE `knowledge_chunk` (
 
 
 
-
-
-
-
-#### 05.文件上传实现
-
-于文档模块部分实现
+#### 1.5 文档解析
 
 
 
 
 
+#### 1.6 文本切割
 
 
 
+#### 1.7 向量化
 
 
 
