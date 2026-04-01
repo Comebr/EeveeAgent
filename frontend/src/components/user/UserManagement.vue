@@ -3,6 +3,11 @@ import { ref, reactive, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import AvatarSelector from './AvatarSelector.vue'
+import BaseTable from '../common/BaseTable.vue'
+import BaseForm from '../common/BaseForm.vue'
+import FormField from '../common/FormField.vue'
+import BaseButton from '../common/BaseButton.vue'
+import BaseCard from '../common/BaseCard.vue'
 
 // 日期格式化函数
 const formatDate = (dateStr) => {
@@ -93,6 +98,16 @@ const presetAvatars = [
   '/avatars/avatar-6.svg',
   '/avatars/avatar-7.svg',
   '/avatars/avatar-8.svg'
+]
+
+// 表格列配置
+const columns = [
+  { key: 'avatar', title: '头像', width: '60px' },
+  { key: 'username', title: '用户名' },
+  { key: 'role', title: '角色' },
+  { key: 'createTime', title: '创建时间' },
+  { key: 'updateTime', title: '更新时间' },
+  { key: 'action', title: '操作', width: '150px' }
 ]
 
 
@@ -333,135 +348,88 @@ onMounted(() => {
 <template>
   <div class="user-management">
     <!-- 搜索区域 -->
-    <div class="search-area">
-      <div class="search-form">
-        <div class="form-item">
-          <input 
-            v-model="searchForm.username" 
-            type="text" 
-            placeholder="请输入用户名"
-            @keyup.enter="handleSearch"
-          />
+    <BaseCard>
+      <div class="search-area">
+        <div class="search-form">
+          <div class="form-item">
+            <input 
+              v-model="searchForm.username" 
+              type="text" 
+              placeholder="请输入用户名"
+              @keyup.enter="handleSearch"
+            />
+          </div>
+          <BaseButton type="primary" @click="handleSearch">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="M21 21l-4.35-4.35"/>
+            </svg>
+            搜索
+          </BaseButton>
+          <BaseButton @click="handleReset">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+            重置
+          </BaseButton>
         </div>
-        <button class="btn btn-primary" @click="handleSearch">
+        <BaseButton type="primary" @click="handleAdd">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="M21 21l-4.35-4.35"/>
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          搜索
-        </button>
-        <button class="btn btn-default" @click="handleReset">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-            <path d="M3 3v5h5"/>
-          </svg>
-          重置
-        </button>
+          新增用户
+        </BaseButton>
       </div>
-      <button class="btn btn-primary" @click="handleAdd">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19"/>
-          <line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-        新增用户
-      </button>
-    </div>
+    </BaseCard>
 
     <!-- 表格区域 -->
-    <div class="table-area">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th style="width: 60px;">头像</th>
-            <th>用户名</th>
-            <th>角色</th>
-            <th>创建时间</th>
-            <th>更新时间</th>
-            <th style="width: 150px;">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="loading">
-            <td colspan="6" class="loading-cell">
-              <div class="loading-spinner"></div>
-              加载中...
-            </td>
-          </tr>
-          <tr v-else-if="userList.length === 0">
-            <td colspan="6" class="empty-cell">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <line x1="9" y1="9" x2="15" y2="9"/>
-                <line x1="9" y1="15" x2="15" y2="15"/>
+    <BaseCard>
+      <BaseTable
+        :columns="columns"
+        :data="userList"
+        :total="total"
+        :currentPage="pagination.current"
+        :pageSize="pagination.size"
+        :loading="loading"
+        @page-change="handlePageChange"
+        @size-change="handleSizeChange"
+      >
+        <template #avatar="{ row }">
+          <div class="avatar-cell">
+            <img :src="row.avatar || '/avatars/avatar-1.svg'" alt="avatar" />
+          </div>
+        </template>
+        <template #role="{ row }">
+          <span class="role-tag" :class="getRoleClass(row.role)">
+            {{ getRoleText(row.role) }}
+          </span>
+        </template>
+        <template #createTime="{ row }">
+          {{ formatDate(row.createTime) }}
+        </template>
+        <template #updateTime="{ row }">
+          {{ formatDate(row.updateTime) }}
+        </template>
+        <template #action="{ row }">
+          <div class="action-btns">
+            <BaseButton type="primary" size="small" @click="handleEdit(row)" :disabled="row.username === 'admin'" title="编辑">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
-              <p>暂无数据</p>
-            </td>
-          </tr>
-          <tr v-for="row in userList" :key="row.id">
-            <td>
-              <div class="avatar-cell">
-                <img :src="row.avatar || '/avatars/avatar-1.svg'" alt="avatar" />
-              </div>
-            </td>
-            <td>{{ row.username }}</td>
-            <td>
-              <span class="role-tag" :class="getRoleClass(row.role)">
-                {{ getRoleText(row.role) }}
-              </span>
-            </td>
-            <td>{{ formatDate(row.createTime) }}</td>
-            <td>{{ formatDate(row.updateTime) }}</td>
-            <td>
-              <div class="action-btns">
-                <button class="btn-icon btn-edit" @click="handleEdit(row)" title="编辑" :disabled="row.username === 'admin'">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                </button>
-                <button class="btn-icon btn-delete" @click="handleDelete(row)" title="删除" :disabled="row.username === 'admin'">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="3 6 5 6 21 6"/>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                  </svg>
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- 分页区域 -->
-    <div class="pagination-area" v-if="total > 0">
-      <div class="pagination-info">
-        共 {{ total }} 条记录
-      </div>
-      <div class="pagination">
-        <button 
-          class="page-btn" 
-          :disabled="pagination.current === 1"
-          @click="handlePageChange(pagination.current - 1)"
-        >
-          上一页
-        </button>
-        <span class="page-info">{{ pagination.current }} / {{ Math.ceil(total / pagination.size) }}</span>
-        <button 
-          class="page-btn" 
-          :disabled="pagination.current >= Math.ceil(total / pagination.size)"
-          @click="handlePageChange(pagination.current + 1)"
-        >
-          下一页
-        </button>
-      </div>
-      <div class="page-size">
-        <select v-model="pagination.size" @change="handleSizeChange(pagination.size)">
-          <option :value="10">10条/页</option>
-          <option :value="20">20条/页</option>
-          <option :value="50">50条/页</option>
-        </select>
-      </div>
-    </div>
+            </BaseButton>
+            <BaseButton type="danger" size="small" @click="handleDelete(row)" :disabled="row.username === 'admin'" title="删除">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </BaseButton>
+          </div>
+        </template>
+      </BaseTable>
+    </BaseCard>
 
     <!-- 新增/编辑对话框 -->
     <div v-if="dialogVisible" class="dialog-overlay" @click.self="dialogVisible = false">
@@ -476,7 +444,7 @@ onMounted(() => {
           </button>
         </div>
         <div class="dialog-body">
-          <form ref="formRef" class="form">
+          <BaseForm :model="formData" :rules="formRules" @submit="handleSubmit" :loading="loading">
             <!-- 头像选择 -->
             <div class="form-item">
               <label>头像</label>
@@ -491,53 +459,51 @@ onMounted(() => {
               </div>
             </div>
 
-            <div class="form-item">
-              <label>用户名 <span class="required">*</span></label>
-              <input 
-                v-model="formData.username" 
-                type="text" 
-                placeholder="请输入用户名"
-                :disabled="isEdit"
-                :class="{ 'error': formErrors.username }"
-              />
-              <div v-if="formErrors.username" class="error-text">{{ formErrors.username }}</div>
-            </div>
+            <FormField 
+              v-model="formData.username" 
+              name="username" 
+              label="用户名" 
+              :required="true"
+              :disabled="isEdit"
+              :error="formErrors.username"
+              placeholder="请输入用户名"
+            />
 
-            <div class="form-item" v-if="!isEdit">
-              <label>密码 <span class="required">*</span></label>
-              <input 
-                v-model="formData.password" 
-                type="password" 
-                placeholder="请输入密码"
-                :class="{ 'error': formErrors.password }"
-              />
-              <div v-if="formErrors.password" class="error-text">{{ formErrors.password }}</div>
-            </div>
+            <FormField 
+              v-model="formData.password" 
+              name="password" 
+              label="密码" 
+              type="password"
+              :required="!isEdit"
+              v-if="!isEdit"
+              :error="formErrors.password"
+              placeholder="请输入密码"
+            />
 
-            <div class="form-item">
-              <label>角色 <span class="required">*</span></label>
-              <select v-model="formData.role" :class="{ 'error': formErrors.role }">
-                <option value="user">普通用户</option>
-                <option value="admin">管理员</option>
-              </select>
-              <div v-if="formErrors.role" class="error-text">{{ formErrors.role }}</div>
-            </div>
+            <FormField 
+              v-model="formData.role" 
+              name="role" 
+              label="角色" 
+              :required="true"
+              :error="formErrors.role"
+              type="select"
+            >
+              <option value="user">普通用户</option>
+              <option value="admin">管理员</option>
+            </FormField>
 
-            <div class="form-item">
-              <label>邮箱</label>
-              <input 
-                v-model="formData.email" 
-                type="email" 
-                placeholder="请输入邮箱（选填）"
-                :class="{ 'error': formErrors.email }"
-              />
-              <div v-if="formErrors.email" class="error-text">{{ formErrors.email }}</div>
-            </div>
-          </form>
+            <FormField 
+              v-model="formData.email" 
+              name="email" 
+              label="邮箱"
+              :error="formErrors.email"
+              placeholder="请输入邮箱（选填）"
+            />
+          </BaseForm>
         </div>
         <div class="dialog-footer">
-          <button class="btn btn-default" @click="dialogVisible = false">取消</button>
-          <button class="btn btn-primary" @click="handleSubmit">确定</button>
+          <BaseButton @click="dialogVisible = false">取消</BaseButton>
+          <BaseButton type="primary" @click="handleSubmit">确定</BaseButton>
         </div>
       </div>
     </div>

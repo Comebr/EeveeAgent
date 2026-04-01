@@ -3,6 +3,8 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import MarkdownRenderer from './MarkdownRenderer.vue'
+import BaseCard from './common/BaseCard.vue'
+import BaseButton from './common/BaseButton.vue'
 
 const router = useRouter()
 const userInfo = ref(null)
@@ -707,11 +709,13 @@ const goToAdmin = () => {
                     </div>
                     <span class="thinking-text">正在思考...</span>
                   </div>
-                  <div v-else class="message-content markdown-wrapper">
-                    <MarkdownRenderer 
-                      :content="message.content" 
-                      :is-streaming="message.isStreaming"
-                    />
+                  <div v-else class="message-content">
+                    <BaseCard>
+                      <MarkdownRenderer 
+                        :content="message.content" 
+                        :is-streaming="message.isStreaming"
+                      />
+                    </BaseCard>
                   </div>
                   
                   <!-- AI消息操作按钮 -->
@@ -1314,12 +1318,8 @@ html, body {
   max-width: calc(100% - 60px);
 }
 
-.markdown-wrapper {
-  background-color: white;
-  border: 1px solid #e8e8e8;
-  padding: 20px 24px;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+.message-content :deep(.base-card) {
+  margin: 0;
 }
 
 /* 思考中动画 */

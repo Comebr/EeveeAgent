@@ -185,6 +185,7 @@ const handleLogin = async () => {
             type="text" 
             placeholder="用户名"
             :disabled="loading"
+            @keyup.enter="handleLogin"
           />
         </div>
         <div v-if="formErrors.username" class="error-text">{{ formErrors.username }}</div>
@@ -203,6 +204,7 @@ const handleLogin = async () => {
             :type="showPassword ? 'text' : 'password'" 
             placeholder="密码"
             :disabled="loading"
+            @keyup.enter="handleLogin"
           />
           <button 
             type="button" 

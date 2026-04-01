@@ -1,14 +1,20 @@
 <script setup>
-import { ref, onMounted, reactive, computed } from 'vue'
+import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import UserManagement from './user/UserManagement.vue'
+import BaseCard from './common/BaseCard.vue'
+import BaseTable from './common/BaseTable.vue'
+import BaseButton from './common/BaseButton.vue'
+import BaseForm from './common/BaseForm.vue'
+import FormField from './common/FormField.vue'
 
 const router = useRouter()
 const userInfo = ref(null)
 const activeMenu = ref('knowledge') // 默认显示知识库管理
 const searchQuery = ref('')
 const sidebarCollapsed = ref(false)
+const showUserDropdown = ref(false)
 
 // 知识库数据
 const knowledgeList = ref([])
@@ -26,6 +32,24 @@ const showDeleteConfirm = ref(false)
 const editingItem = ref({})
 const itemToDelete = ref(null)
 
+// 文档管理
+const activeTab = ref('knowledge') // knowledge 或 documents
+const selectedKnowledgeBase = ref(null)
+const documents = ref([])
+const showUploadModal = ref(false)
+const showDocumentDeleteConfirm = ref(false)
+const documentToDelete = ref('')
+const documentToDeleteId = ref('')
+const selectedFiles = ref([])
+const uploading = ref(false)
+const uploadProgress = ref(0)
+const statusFilter = ref('all')
+const documentPagination = reactive({
+  current: 1,
+  size: 10,
+  total: 0
+})
+
 // 消息提示
 const showMessage = ref(false)
 const messageText = ref('')
@@ -42,6 +66,304 @@ const createForm = reactive({
 const totalPages = computed(() => {
   return Math.ceil(pagination.total / pagination.size) || 1
 })
+
+// 知识库表格列配置
+const knowledgeColumns = [
+  { key: 'name', title: '名称' },
+  { key: 'embeddingModel', title: 'Embedding模型' },
+  { key: 'collection', title: 'Collection' },
+  { key: 'owner', title: '负责人' },
+  { key: 'createdAt', title: '创建时间' },
+  { key: 'updatedAt', title: '修改时间' },
+  { key: 'action', title: '操作', width: '160px' }
+]
+
+// 文档表格列配置
+const documentColumns = [
+  { key: 'documentName', title: '文档' },
+  { key: 'source', title: '来源' },
+  { key: 'processMode', title: '处理模式' },
+  { key: 'status', title: '状态' },
+  { key: 'enabled', title: '启用' },
+  { key: 'chunkCount', title: '分块数' },
+  { key: 'fileType', title: '类型' },
+  { key: 'fileSize', title: '大小' },
+  { key: 'updateTime', title: '更新时间' },
+  { key: 'action', title: '操作', width: '160px' }
+]
+
+// 切换到文档管理标签页
+const navigateToDocuments = (kbId, kbName) => {
+  selectedKnowledgeBase.value = {
+    id: kbId,
+    name: kbName
+  }
+  activeTab.value = 'documents'
+  loadDocuments(kbId)
+}
+
+// 加载文档列表
+const loadDocuments = async (kbId) => {
+  try {
+    const params = {
+      kbId: kbId,
+      current: documentPagination.current,
+      size: documentPagination.size
+    }
+    // 添加文档名称搜索参数
+    if (searchQuery.value && searchQuery.value.trim()) {
+      params.documentName = searchQuery.value.trim()
+    }
+    
+    // 添加状态筛选参数
+    if (statusFilter.value === 'enabled') {
+      params.enabled = '1'
+    } else if (statusFilter.value === 'disabled') {
+      params.enabled = '0'
+    }
+    // 全部状态时不传递enabled参数
+    
+    const response = await axios.get('/kb/doc/pageQuery', { params })
+    
+    if (response.data.code === '0') {
+      documents.value = response.data.data.records || []
+      documentPagination.total = response.data.data.total || 0
+    } else {
+      showToast('获取文档列表失败', 'error')
+    }
+  } catch (error) {
+    console.error('获取文档列表失败:', error)
+    showToast('获取文档列表失败，请稍后重试', 'error')
+  }
+}
+
+// 返回知识库管理
+const goBackToKnowledge = () => {
+  activeTab.value = 'knowledge'
+  selectedKnowledgeBase.value = null
+}
+
+// 处理文档搜索
+const handleDocumentSearch = () => {
+  // 实现搜索功能
+  loadDocuments(selectedKnowledgeBase.value.id)
+}
+
+// 刷新文档列表
+const refreshDocuments = () => {
+  loadDocuments(selectedKnowledgeBase.value.id)
+}
+
+// 重置筛选条件
+const resetFilters = () => {
+  searchQuery.value = ''
+  statusFilter.value = 'all'
+  if (selectedKnowledgeBase.value) {
+    loadDocuments(selectedKnowledgeBase.value.id)
+  }
+}
+
+// 监听状态筛选变化
+watch(statusFilter, () => {
+  if (selectedKnowledgeBase.value) {
+    loadDocuments(selectedKnowledgeBase.value.id)
+  }
+})
+
+// 防抖定时器
+let toggleDebounceTimer = null
+
+// 切换文档启用状态
+const toggleDocumentEnabled = (id, enabled) => {
+  // 清除之前的定时器
+  if (toggleDebounceTimer) {
+    clearTimeout(toggleDebounceTimer)
+  }
+  
+  // 设置新的定时器，1s后执行
+  toggleDebounceTimer = setTimeout(async () => {
+    try {
+      const response = await axios.post('/kb/doc/switch', null, {
+        params: {
+          docId: id,
+          enabled: enabled
+        }
+      })
+      
+      if (response.data.code === '0') {
+        const doc = documents.value.find(d => d.id === id)
+        if (doc) {
+          doc.enabled = enabled ? 1 : 0
+        }
+        showToast('操作成功', 'success')
+      } else {
+        showToast('操作失败', 'error')
+      }
+    } catch (error) {
+      console.error('切换启用状态失败:', error)
+      showToast('操作失败，请稍后重试', 'error')
+    }
+  }, 300)
+}
+
+// 编辑文档
+const editDocument = (doc) => {
+  // 实现编辑功能
+  console.log('编辑文档:', doc)
+}
+
+// 查看文档
+const viewDocument = (doc) => {
+  // 实现查看功能
+  console.log('查看文档:', doc)
+}
+
+// 下载文档
+const downloadDocument = (doc) => {
+  // 实现下载功能
+  console.log('下载文档:', doc)
+}
+
+// 确认删除文档
+const confirmDeleteDocument = (id, name) => {
+  documentToDeleteId.value = id
+  documentToDelete.value = name
+  showDocumentDeleteConfirm.value = true
+}
+
+// 处理文档删除确认
+const handleDocumentDeleteConfirm = async () => {
+  try {
+    const response = await axios.delete(`/kb/doc/deleteDoc/${documentToDeleteId.value}`)
+    
+    if (response.data.code === '0') {
+      showDocumentDeleteConfirm.value = false
+      showToast('删除成功', 'success')
+      loadDocuments(selectedKnowledgeBase.value.id)
+    } else {
+      showToast('删除失败', 'error')
+    }
+  } catch (error) {
+    console.error('删除文档失败:', error)
+    showToast('删除失败，请稍后重试', 'error')
+  }
+}
+
+// 取消删除文档
+const handleDocumentDeleteCancel = () => {
+  showDocumentDeleteConfirm.value = false
+  documentToDelete.value = ''
+}
+
+// 处理文件选择
+const handleFileSelect = (event) => {
+  const files = Array.from(event.target.files)
+  if (files.length > 1) {
+    showToast('当前只支持单文件上传', 'warning')
+    selectedFiles.value = [files[0]] // 只取第一个文件
+  } else {
+    selectedFiles.value = files
+  }
+}
+
+// 处理文件拖拽
+const handleDrop = (event) => {
+  event.preventDefault()
+  const files = Array.from(event.dataTransfer.files)
+  if (files.length > 1) {
+    showToast('当前只支持单文件上传', 'warning')
+    selectedFiles.value = [files[0]] // 只取第一个文件
+  } else {
+    selectedFiles.value = files
+  }
+}
+
+// 开始上传
+const startUpload = async () => {
+  if (!selectedFiles.value.length) {
+    showToast('请选择要上传的文件', 'warning')
+    return
+  }
+  
+  if (!selectedKnowledgeBase.value) {
+    showToast('请先选择知识库', 'warning')
+    return
+  }
+  
+  const file = selectedFiles.value[0] // 只处理单个文件
+  uploading.value = true
+  uploadProgress.value = 0
+  
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('kbId', selectedKnowledgeBase.value.id)
+    
+    // 调用后端上传接口
+    const response = await axios.post('/kb/doc/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total) {
+          uploadProgress.value = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        }
+      }
+    })
+    
+    if (response.data.code === '0') {
+      uploading.value = false
+      showUploadModal.value = false
+      showToast('上传成功', 'success')
+      loadDocuments(selectedKnowledgeBase.value.id)
+      selectedFiles.value = [] // 清空选择的文件
+    } else {
+      uploading.value = false
+      showToast(response.data.message || '上传失败', 'error')
+    }
+  } catch (error) {
+    console.error('上传文件失败:', error)
+    uploading.value = false
+    showToast('上传失败，请稍后重试', 'error')
+  }
+}
+
+// 格式化文件大小
+const formatFileSize = (size) => {
+  if (!size || size < 0) return '0 B'
+  if (size < 1024) {
+    return size + ' B'
+  } else if (size < 1024 * 1024) {
+    return (size / 1024).toFixed(1) + ' KB'
+  } else if (size < 1024 * 1024 * 1024) {
+    return (size / (1024 * 1024)).toFixed(1) + ' MB'
+  } else {
+    return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB'
+  }
+}
+
+const getMimeTypeSubtype = (mimeType) => {
+  if (!mimeType) return '未知'
+  const parts = mimeType.split('/')
+  if (parts.length >= 2) {
+    return parts[1]
+  }
+  return mimeType
+}
+
+// 格式化日期
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }).replace(/\//g, '/')
+}
 
 // 获取知识库列表
 const fetchKnowledgeList = async () => {
@@ -73,20 +395,6 @@ const fetchKnowledgeList = async () => {
   } finally {
     loading.value = false
   }
-}
-
-// 格式化日期
-const formatDate = (dateStr) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  }).replace(/\//g, '/')
 }
 
 // 刷新知识库列表
@@ -225,6 +533,17 @@ const setActiveMenu = (menu) => {
 
 const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value
+}
+
+// 切换用户下拉框
+const toggleUserDropdown = () => {
+  showUserDropdown.value = !showUserDropdown.value
+}
+
+// 切换文档分页
+const changeDocumentPage = (page) => {
+  documentPagination.current = page
+  loadDocuments(selectedKnowledgeBase.value.id)
 }
 </script>
 
@@ -377,11 +696,27 @@ const toggleSidebar = () => {
           
           <!-- 用户信息 -->
           <div class="user-info">
-            <div class="avatar">
-              <img v-if="userInfo?.avatar" :src="userInfo.avatar" alt="avatar" />
-              <span v-else>{{ userInfo?.username?.charAt(0).toUpperCase() || 'A' }}</span>
+            <div class="user-dropdown" @click="toggleUserDropdown">
+              <div class="avatar">
+                <img v-if="userInfo?.avatar" :src="userInfo.avatar" alt="avatar" />
+                <span v-else>{{ userInfo?.username?.charAt(0).toUpperCase() || 'A' }}</span>
+              </div>
+              <span class="username">{{ userInfo?.username || 'admin' }}</span>
+              <svg class="dropdown-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+              <!-- 下拉菜单 -->
+              <div v-if="showUserDropdown" class="user-dropdown-menu">
+                <div class="dropdown-item" @click="handleLogout">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                  </svg>
+                  <span>退出登录</span>
+                </div>
+              </div>
             </div>
-            <span class="username">{{ userInfo?.username || 'admin' }}</span>
           </div>
         </div>
       </header>
@@ -390,7 +725,10 @@ const toggleSidebar = () => {
       <div class="breadcrumb">
         <span class="breadcrumb-link" @click="setActiveMenu('overview')">首页</span>
         <span class="separator">/</span>
-        <span class="current">{{ activeMenu === 'overview' ? '数据概览' : activeMenu === 'knowledge' ? '知识库管理' : activeMenu === 'users' ? '用户管理' : '系统设置' }}</span>
+        <span v-if="activeMenu === 'knowledge' && activeTab === 'documents'" class="breadcrumb-link" @click="activeTab = 'knowledge'">知识库管理</span>
+        <span v-else class="current">{{ activeMenu === 'overview' ? '数据概览' : activeMenu === 'knowledge' ? '知识库管理' : activeMenu === 'users' ? '用户管理' : '系统设置' }}</span>
+        <span v-if="activeMenu === 'knowledge' && activeTab === 'documents'" class="separator">/</span>
+        <span v-if="activeMenu === 'knowledge' && activeTab === 'documents'" class="current">文档管理</span>
       </div>
       
       <!-- 内容区域 -->
@@ -401,172 +739,278 @@ const toggleSidebar = () => {
           <p>欢迎使用 Eevee 管理后台</p>
         </div>
         <div v-else-if="activeMenu === 'knowledge'" class="page-content knowledge-page">
-          <!-- 页面标题和操作栏 -->
-          <div class="page-header">
-            <div class="header-left">
-              <h2>知识库管理</h2>
-              <p class="description">管理所有知识库及其文档</p>
-            </div>
-            <div class="header-right">
-              <div class="search-box">
-                <input 
-                  type="text" 
-                  placeholder="搜索知识库名称" 
-                  v-model="searchQuery"
-                  @keyup.enter="fetchKnowledgeList"
-                />
-                <button class="search-button" @click="fetchKnowledgeList">搜索</button>
+          <div v-if="activeTab === 'knowledge'">
+            <!-- 页面标题和操作栏 -->
+            <div class="page-header">
+              <div class="header-left">
+                <h2>知识库管理</h2>
+                <p class="description">管理所有知识库及其文档</p>
               </div>
-              <button class="refresh-button" @click="refreshKnowledgeList" :disabled="loading">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ 'spin': loading }">
-                  <path d="M21 12c0-4.97-4.03-9-9-9s-9 4.03-9 9 4.03 9 9 9"/>
-                  <path d="M15 12l-3-3-3 3"/>
-                  <path d="M9 12l3 3 3-3"/>
-                </svg>
-                刷新
-              </button>
-              <button class="add-button" @click="showCreateModal = true">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                新增知识库
-              </button>
-            </div>
-          </div>
-          
-          <!-- 数据卡片 -->
-          <div class="data-cards">
-            <div class="card">
-              <div class="card-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="4" y="4" width="16" height="20" rx="2" ry="2"/>
-                  <rect x="6" y="6" width="12" height="4" fill="#1E293B"/>
-                  <circle cx="9" cy="8" r="1" fill="currentColor"/>
-                  <rect x="6" y="12" width="12" height="4" fill="#1E293B"/>
-                  <circle cx="9" cy="14" r="1" fill="currentColor"/>
-                  <rect x="6" y="18" width="12" height="4" fill="#1E293B"/>
-                  <circle cx="9" cy="20" r="1" fill="currentColor"/>
-                </svg>
-              </div>
-              <div class="card-content">
-                <div class="card-value">{{ pagination.total }}</div>
-                <div class="card-label">知识库</div>
-              </div>
-              <div class="card-action">
-                <span>全部</span>
+              <div class="header-right">
+                <div class="search-box">
+                  <input 
+                    type="text" 
+                    placeholder="搜索知识库名称" 
+                    v-model="searchQuery"
+                    @keyup.enter="fetchKnowledgeList"
+                  />
+                  <button class="search-button" @click="fetchKnowledgeList">搜索</button>
+                </div>
+                <button class="refresh-button" @click="refreshKnowledgeList" :disabled="loading">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ 'spin': loading }">
+                    <path d="M21 12c0-4.97-4.03-9-9-9s-9 4.03-9 9 4.03 9 9 9"/>
+                    <path d="M15 12l-3-3-3 3"/>
+                    <path d="M9 12l3 3 3-3"/>
+                  </svg>
+                  刷新
+                </button>
+                <button class="add-button" @click="showCreateModal = true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  新增知识库
+                </button>
               </div>
             </div>
-            <div class="card">
-              <div class="card-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                  <line x1="16" y1="13" x2="8" y2="13"/>
-                  <line x1="16" y1="17" x2="8" y2="17"/>
-                  <polyline points="10 9 9 9 8 9"/>
-                </svg>
-              </div>
-              <div class="card-content">
-                <div class="card-value">0</div>
-                <div class="card-label">文档数</div>
-              </div>
-              <div class="card-action">
-                <span>全部</span>
-              </div>
+            
+            <!-- 数据卡片 -->
+            <div class="data-cards">
+              <BaseCard>
+                <template #default>
+                  <div class="card-content">
+                    <div class="card-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="4" y="4" width="16" height="20" rx="2" ry="2"/>
+                        <rect x="6" y="6" width="12" height="4" fill="#1E293B"/>
+                        <circle cx="9" cy="8" r="1" fill="currentColor"/>
+                        <rect x="6" y="12" width="12" height="4" fill="#1E293B"/>
+                        <circle cx="9" cy="14" r="1" fill="currentColor"/>
+                        <rect x="6" y="18" width="12" height="4" fill="#1E293B"/>
+                        <circle cx="9" cy="20" r="1" fill="currentColor"/>
+                      </svg>
+                    </div>
+                    <div class="card-value">{{ pagination.total }}</div>
+                    <div class="card-label">知识库</div>
+                  </div>
+                </template>
+              </BaseCard>
+              <BaseCard>
+                <template #default>
+                  <div class="card-content">
+                    <div class="card-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                      </svg>
+                    </div>
+                    <div class="card-value">0</div>
+                    <div class="card-label">文档数</div>
+                  </div>
+                </template>
+              </BaseCard>
+              <BaseCard>
+                <template #default>
+                  <div class="card-content">
+                    <div class="card-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                    </div>
+                    <div class="card-value">{{ pagination.total }}</div>
+                    <div class="card-label">定义组标准</div>
+                  </div>
+                </template>
+              </BaseCard>
+              <BaseCard>
+                <template #default>
+                  <div class="card-content">
+                    <div class="card-icon">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                      </svg>
+                    </div>
+                    <div class="card-value">1</div>
+                    <div class="card-label">创建用户数</div>
+                  </div>
+                </template>
+              </BaseCard>
             </div>
-            <div class="card">
-              <div class="card-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="8" x2="12" y2="12"/>
-                  <line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-              </div>
-              <div class="card-content">
-                <div class="card-value">{{ pagination.total }}</div>
-                <div class="card-label">定义组标准</div>
-              </div>
-              <div class="card-action">
-                <span>全部</span>
-              </div>
-            </div>
-            <div class="card">
-              <div class="card-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-              </div>
-              <div class="card-content">
-                <div class="card-value">1</div>
-                <div class="card-label">创建用户数</div>
-              </div>
-              <div class="card-action">
-                <span>全部</span>
-              </div>
-            </div>
-          </div>
-          
-          <!-- 知识库表格 -->
-          <div class="knowledge-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>名称</th>
-                  <th>Embedding模型</th>
-                  <th>Collection</th>
-                  <th>负责人</th>
-                  <th>创建时间</th>
-                  <th>修改时间</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(item, index) in knowledgeList" :key="item.kbId">
-                  <td class="name-cell">{{ item.name }}</td>
-                  <td>{{ item.embeddingModel }}</td>
-                  <td class="collection-cell">{{ item.collection }}</td>
-                  <td>{{ item.owner }}</td>
-                  <td>{{ item.createdAt }}</td>
-                  <td>{{ item.updatedAt }}</td>
-                  <td class="actions-cell">
-                    <button class="action-button edit-button" @click="handleEdit(item)">
+            
+            <!-- 知识库表格 -->
+            <div class="knowledge-table">
+              <BaseTable 
+                :columns="knowledgeColumns" 
+                :data="knowledgeList" 
+                :total="pagination.total"
+                :currentPage="pagination.current"
+                :pageSize="pagination.size"
+                @page-change="changePage"
+              >
+                <template #name="{ row }">
+                  <a href="#" class="kb-name-link" @click.prevent="navigateToDocuments(row.kbId, row.name)">{{ row.name }}</a>
+                </template>
+                <template #action="{ row }">
+                  <div class="table-actions">
+                    <BaseButton type="primary" size="small" @click="handleEdit(row)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                       </svg>
                       编辑
-                    </button>
-                    <button class="action-button delete-button" @click="handleDeleteClick(item)">
+                    </BaseButton>
+                    <BaseButton type="danger" size="small" @click="handleDeleteClick(row)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="3 6 5 6 21 6"/>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                       </svg>
                       删除
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            
-            <!-- 分页 -->
-            <div class="pagination">
-              <span class="total">共{{ pagination.total }}条</span>
-              <div class="page-controls">
-                <button 
-                  class="page-button" 
-                  :disabled="pagination.current <= 1"
-                  @click="changePage(pagination.current - 1)"
-                >上一页</button>
-                <span class="current-page">{{ pagination.current }}/{{ totalPages }}</span>
-                <button 
-                  class="page-button" 
-                  :disabled="pagination.current >= totalPages"
-                  @click="changePage(pagination.current + 1)"
-                >下一页</button>
+                    </BaseButton>
+                  </div>
+                </template>
+              </BaseTable>
+            </div>
+          </div>
+          
+          <div v-else-if="activeTab === 'documents'">
+            <!-- 文档管理 -->
+            <div class="document-management">
+
+              
+              <!-- 页面头部 -->
+              <div class="page-header">
+                <div class="header-left">
+                  <h1 class="page-title">
+                    文档管理
+                    <span class="kb-name-title">{{ selectedKnowledgeBase?.name ? ' · ' + selectedKnowledgeBase.name : '' }}</span>
+                  </h1>
+                </div>
+                <div class="header-right">
+                  <button class="back-button" @click="goBackToKnowledge">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    返回知识库
+                  </button>
+                  <button class="upload-button" @click="showUploadModal = true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    上传文档
+                  </button>
+                </div>
+              </div>
+
+              <!-- 搜索和筛选 -->
+              <div class="search-filter">
+                <div class="search-box">
+                  <input 
+                    type="text" 
+                    v-model="searchQuery" 
+                    placeholder="搜索文档名称"
+                    @keyup.enter="handleDocumentSearch"
+                  />
+                  <button class="search-button" @click="handleDocumentSearch">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="11" cy="11" r="8"/>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                  </button>
+                </div>
+                <div class="filter-box">
+                  <select v-model="statusFilter" class="status-select">
+                    <option value="all">全部状态</option>
+                    <option value="enabled">启用</option>
+                    <option value="disabled">禁用</option>
+                  </select>
+                  <button class="refresh-button" @click="resetFilters">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                    </svg>
+                    重置
+                  </button>
+                </div>
+              </div>
+
+              <!-- 文档列表 -->
+              <div class="document-list">
+                <BaseTable 
+                  :columns="documentColumns" 
+                  :data="documents" 
+                  :total="documentPagination.total"
+                  :currentPage="documentPagination.current"
+                  :pageSize="documentPagination.size"
+                  @page-change="changeDocumentPage"
+                >
+                  <template #source="{ row }">
+                    Local File
+                  </template>
+                  <template #processMode="{ row }">
+                    chunk
+                  </template>
+                  <template #status="{ row }">
+                    <span class="status-indicator success">success</span>
+                  </template>
+                  <template #enabled="{ row }">
+                    <label class="switch">
+                      <input type="checkbox" :checked="row.enabled === 1" @change="toggleDocumentEnabled(row.id, !row.enabled)">
+                      <span class="slider"></span>
+                    </label>
+                  </template>
+                  <template #chunkCount="{ row }">
+                    8
+                  </template>
+                  <template #fileType="{ row }">
+                    <span class="file-type-tag">{{ getMimeTypeSubtype(row.fileType) }}</span>
+                  </template>
+                  <template #fileSize="{ row }">
+                    <span class="file-size-text">{{ formatFileSize(row.fileSize) }}</span>
+                  </template>
+                  <template #updateTime="{ row }">
+                    {{ formatDate(row.updateTime) }}
+                  </template>
+                  <template #action="{ row }">
+                    <div class="table-actions">
+                      <BaseButton type="primary" size="small" @click="editDocument(row)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                      </BaseButton>
+                      <BaseButton type="secondary" size="small" @click="viewDocument(row)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      </BaseButton>
+                      <BaseButton type="secondary" size="small" @click="downloadDocument(row)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                          <polyline points="7 10 12 15 17 10"/>
+                          <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                      </BaseButton>
+                      <BaseButton type="danger" size="small" @click="confirmDeleteDocument(row.id, row.documentName)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                          <line x1="10" y1="11" x2="10" y2="17"/>
+                          <line x1="14" y1="11" x2="14" y2="17"/>
+                        </svg>
+                      </BaseButton>
+                    </div>
+                  </template>
+                </BaseTable>
               </div>
             </div>
           </div>
@@ -681,6 +1125,124 @@ const toggleSidebar = () => {
         <div class="modal-footer">
           <button class="cancel-button" @click="handleDeleteCancel">取消</button>
           <button class="delete-confirm-button" @click="handleDeleteConfirm">删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 上传文档弹窗 -->
+    <div v-if="showUploadModal" class="modal-overlay" @click.self="showUploadModal = false">
+      <div class="modal-content upload-modal">
+        <div class="modal-header">
+          <h3>上传文档</h3>
+          <button class="close-button" @click="showUploadModal = false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="upload-area" @drop="handleDrop" @dragover.prevent @dragenter.prevent @dragleave.prevent>
+            <div class="upload-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#667eea" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </div>
+            <p class="upload-text">点击或拖拽文件到此处上传</p>
+            <p class="upload-hint">支持 .md, .txt, .pdf 等文件格式</p>
+            <input type="file" ref="fileInput" class="file-input" @change="handleFileSelect" />
+            <button class="browse-button" @click="$refs.fileInput.click()">浏览文件</button>
+          </div>
+          
+          <!-- 显示选择的文件 -->
+          <div v-if="selectedFiles.length > 0" class="selected-files">
+            <div class="file-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+              <div class="file-info">
+                <div class="file-name">{{ selectedFiles[0].name }}</div>
+                <div class="file-size">{{ formatFileSize(selectedFiles[0].size) }}</div>
+              </div>
+              <button class="remove-file" @click="selectedFiles = []">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <!-- 文档信息表单 -->
+          <div class="document-form" v-if="selectedFiles.length > 0">
+            <div class="form-row">
+              <div class="form-group">
+                <label>文件名称</label>
+                <input type="text" v-model="selectedFiles[0].name" class="form-input" readonly />
+              </div>
+              <div class="form-group">
+                <label>文件大小</label>
+                <input type="text" :value="formatFileSize(selectedFiles[0].size)" class="form-input" readonly />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>文件类型</label>
+                <input type="text" :value="selectedFiles[0].type || '未知'" class="form-input" readonly />
+              </div>
+              <div class="form-group">
+                <label>所属知识库</label>
+                <input type="text" :value="selectedKnowledgeBase?.name" class="form-input" readonly />
+              </div>
+            </div>
+          </div>
+          
+          <div v-if="uploading" class="upload-progress">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+            </div>
+            <span class="progress-text">{{ uploadProgress }}%</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-button" @click="showUploadModal = false" :disabled="uploading">取消</button>
+          <button class="confirm-button" @click="startUpload" :disabled="!selectedFiles.length || uploading">开始上传</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除文档确认弹窗 -->
+    <div v-if="showDocumentDeleteConfirm" class="modal-overlay" @click.self="handleDocumentDeleteCancel">
+      <div class="modal-content delete-modal">
+        <div class="modal-header">
+          <h3>确认删除</h3>
+          <button class="close-button" @click="handleDocumentDeleteCancel">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="delete-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ff4d4f" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+          </div>
+          <p class="delete-message">确定要删除文档 <span class="delete-name">{{ documentToDelete }}</span> 吗？</p>
+          <p class="delete-hint">此操作不可撤销，删除后相关数据将被永久清除。</p>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-button" @click="handleDocumentDeleteCancel">取消</button>
+          <button class="delete-confirm-button" @click="handleDocumentDeleteConfirm">删除</button>
         </div>
       </div>
     </div>
@@ -937,14 +1499,21 @@ const toggleSidebar = () => {
 .user-info {
   display: flex;
   align-items: center;
+}
+
+.user-dropdown {
+  position: relative;
+  display: flex;
+  align-items: center;
   gap: 8px;
   padding: 6px 12px;
   border-radius: 20px;
   background-color: #f5f7fa;
   transition: all 0.2s ease;
+  cursor: pointer;
 }
 
-.user-info:hover {
+.user-dropdown:hover {
   background-color: #e8eaf0;
 }
 
@@ -972,6 +1541,61 @@ const toggleSidebar = () => {
   font-size: 14px;
   color: #333;
   font-weight: 500;
+}
+
+.dropdown-icon {
+  color: #666;
+  transition: transform 0.3s ease;
+}
+
+.user-dropdown:hover .dropdown-icon {
+  color: #667eea;
+}
+
+.user-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  min-width: 160px;
+  z-index: 1000;
+  border: 1px solid #f0f0f0;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  color: #ef4444;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  margin: 4px;
+}
+
+.dropdown-item:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.kb-name-link {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-block;
+  position: relative;
+}
+
+.kb-name-link:hover {
+  color: #5a6fe6;
+  text-decoration: underline;
+  transform: translateY(-1px);
 }
 
 /* 面包屑 */
@@ -1101,7 +1725,7 @@ const toggleSidebar = () => {
 .page-header .header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -1112,17 +1736,17 @@ const toggleSidebar = () => {
   border: 1px solid #e8e8e8;
   border-radius: 6px;
   overflow: hidden;
-  height: 36px;
+  height: 32px;
   background-color: white;
 }
 
 .page-header .search-box input {
   border: none;
   outline: none;
-  padding: 0 12px;
+  padding: 0 10px;
   font-size: 14px;
   color: #333;
-  width: 200px;
+  width: 180px;
   height: 100%;
 }
 
@@ -1131,7 +1755,7 @@ const toggleSidebar = () => {
 }
 
 .search-button {
-  padding: 0 20px;
+  padding: 0 16px;
   background-color: #f5f7fa;
   border: none;
   border-left: 1px solid #e8e8e8;
@@ -1155,13 +1779,13 @@ const toggleSidebar = () => {
 .refresh-button {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
+  gap: 6px;
+  padding: 8px 16px;
   background-color: white;
   border: 1px solid #e8e8e8;
-  border-radius: 8px;
+  border-radius: 6px;
   color: #666;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1187,13 +1811,13 @@ const toggleSidebar = () => {
 .add-button {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
+  gap: 6px;
+  padding: 8px 16px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   color: white;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1226,20 +1850,20 @@ const toggleSidebar = () => {
 /* 数据卡片 */
 .data-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
   padding: 0 24px 24px;
   margin-bottom: 20px;
 }
 
 .card {
   background: linear-gradient(135deg, white 0%, #fafbff 100%);
-  border-radius: 12px;
-  padding: 24px;
+  border-radius: 10px;
+  padding: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   border: 1px solid #e8e8e8;
   position: relative;
@@ -1270,9 +1894,9 @@ const toggleSidebar = () => {
 }
 
 .card-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
   background: linear-gradient(135deg, #f0f4ff 0%, #e6f7ff 100%);
   display: flex;
   align-items: center;
@@ -1293,10 +1917,10 @@ const toggleSidebar = () => {
 }
 
 .card-value {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
   color: #333;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   transition: color 0.3s ease;
 }
 
@@ -1399,8 +2023,34 @@ const toggleSidebar = () => {
 .knowledge-table .name-cell {
   font-weight: 500;
   color: #333;
-  font-size: 15px;
-  transition: color 0.3s ease;
+  transition: all 0.3s ease;
+}
+
+.knowledge-table .kb-name-link {
+  color: #333;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  display: inline-block;
+  position: relative;
+}
+
+.knowledge-table .kb-name-link:hover {
+  color: #667eea;
+}
+
+.knowledge-table .kb-name-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background-color: #667eea;
+  transition: width 0.3s ease;
+}
+
+.knowledge-table .kb-name-link:hover::after {
+  width: 100%;
 }
 
 .knowledge-table tr:hover .name-cell {
@@ -2096,6 +2746,661 @@ const toggleSidebar = () => {
   
   .toast-content span {
     font-size: 13px;
+  }
+}
+
+/* 标签页容器 */
+.tab-container {
+  margin-top: 24px;
+}
+
+.tab-content {
+  animation: fadeIn 0.3s ease;
+}
+
+/* 文档管理样式 */
+.document-management {
+  padding: 0;
+}
+
+/* 面包屑导航 */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  color: #666;
+}
+
+.breadcrumb-item {
+  color: #666;
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+.breadcrumb-item:hover {
+  color: #667eea;
+}
+
+.breadcrumb-item.current {
+  color: #333;
+  font-weight: 500;
+}
+
+.breadcrumb-separator {
+  color: #ccc;
+  margin: 0 4px;
+}
+
+/* 文档页面头部 */
+.document-management .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.document-management .header-left h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.document-management .kb-name-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #666;
+  margin-left: 8px;
+}
+
+.document-management .header-right {
+  display: flex;
+  gap: 12px;
+}
+
+.back-button,
+.upload-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.back-button {
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #e8e8e8;
+}
+
+.back-button:hover {
+  background-color: #e8e8e8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.upload-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+}
+
+.upload-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a409a 100%);
+}
+
+/* 搜索和筛选 */
+.search-filter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 20px;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e8e8e8;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: white;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 2px;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.search-box:hover {
+  border-color: #d0d3d9;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.search-box input {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  width: 300px;
+  transition: all 0.3s ease;
+  background-color: transparent;
+}
+
+.search-box input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.search-box input::placeholder {
+  color: #999;
+  font-size: 14px;
+}
+
+.search-button {
+  padding: 8px 12px;
+  background-color: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+}
+
+.search-button:hover {
+  background-color: #5a6fd8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.search-button svg {
+  margin: 0;
+  vertical-align: middle;
+}
+
+.filter-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-select {
+  padding: 10px 16px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  font-size: 14px;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.status-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.refresh-button {
+  padding: 10px 16px;
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.refresh-button:hover {
+  background-color: #e8e8e8;
+  transform: translateY(-1px);
+}
+
+/* 文档列表 */
+.document-list {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e8e8e8;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.list-header {
+  display: grid;
+  grid-template-columns: 220px 100px 120px 80px 60px 80px 100px 100px 150px 120px;
+  padding: 16px 24px;
+  background-color: #fafafa;
+  border-bottom: 1px solid #e8e8e8;
+  font-weight: 500;
+  font-size: 14px;
+  color: #666;
+  gap: 12px;
+}
+
+.document-item {
+  display: grid;
+  grid-template-columns: 220px 100px 120px 80px 60px 80px 100px 100px 150px 120px;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e8e8e8;
+  transition: all 0.3s ease;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-item {
+  text-align: left;
+}
+
+.list-body {
+  min-height: 200px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 0;
+  color: #999;
+}
+
+.empty-state svg {
+  margin-bottom: 16px;
+}
+
+.document-item:hover {
+  background-color: #fafbff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.1);
+}
+
+.item-cell {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: #333;
+}
+
+.document-name {
+  font-weight: 500;
+}
+
+.status-indicator {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-indicator.success {
+  background-color: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 20px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #667eea;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #667eea;
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+.file-type-tag {
+  display: inline;
+  font-size: 14px;
+  color: #666;
+  font-weight: 400;
+  word-break: break-all;
+  max-width: 100%;
+  box-sizing: border-box;
+  line-height: 1.4;
+}
+
+.file-size-text {
+  font-size: 14px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.document-item .actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.document-item .action-button {
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f5f5;
+  color: #666;
+}
+
+.document-item .action-button:hover {
+  background-color: #e8e8e8;
+  transform: translateY(-1px);
+}
+
+.document-item .action-button.edit:hover {
+  background-color: #e6f7ff;
+  color: #1890ff;
+}
+
+.document-item .action-button.view:hover {
+  background-color: #f6ffed;
+  color: #52c41a;
+}
+
+.document-item .action-button.download:hover {
+  background-color: #fff7e6;
+  color: #fa8c16;
+}
+
+.document-item .action-button.delete:hover {
+  background-color: #fff1f0;
+  color: #ff4d4f;
+}
+
+/* 文档分页 */
+.document-management .pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e8e8e8;
+}
+
+.document-management .page-info {
+  font-size: 14px;
+  color: #666;
+}
+
+/* 上传区域 */
+.upload-area {
+  border: 2px dashed #e8e8e8;
+  border-radius: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  background-color: #fafafa;
+}
+
+.upload-area:hover {
+  border-color: #667eea;
+  background-color: #f0f4ff;
+}
+
+.upload-icon {
+  margin-bottom: 16px;
+}
+
+.upload-text {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.upload-hint {
+  font-size: 14px;
+  color: #999;
+  margin-bottom: 24px;
+}
+
+.file-input {
+  display: none;
+}
+
+.browse-button {
+  padding: 10px 24px;
+  background-color: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.browse-button:hover {
+  background-color: #5a6fd8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* 上传进度 */
+.upload-progress {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* 文档信息表单 */
+.document-form {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #e8e8e8;
+}
+
+.form-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.form-group {
+  flex: 1;
+  min-width: 200px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  font-size: 14px;
+  background-color: #fafafa;
+  color: #333;
+  transition: all 0.3s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  background-color: white;
+}
+
+.form-input[readonly] {
+  cursor: not-allowed;
+  background-color: #f5f5f5;
+  color: #666;
+}
+
+.progress-text {
+  font-size: 14px;
+  color: #666;
+  text-align: right;
+}
+
+/* 上传弹窗 */
+.upload-modal {
+  width: 600px;
+}
+
+/* 选中文件显示 */
+.selected-files {
+  margin-top: 24px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background-color: #fafafa;
+  transition: background-color 0.2s ease;
+}
+
+.file-item:hover {
+  background-color: #f5f5f5;
+}
+
+.file-item svg {
+  color: #667eea;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size {
+  font-size: 12px;
+  color: #999;
+}
+
+.remove-file {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.remove-file:hover {
+  color: #ff4d4f;
+  background-color: rgba(255, 77, 79, 0.1);
+}
+
+/* 动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 </style>
