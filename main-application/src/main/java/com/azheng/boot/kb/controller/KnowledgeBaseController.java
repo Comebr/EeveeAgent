@@ -1,10 +1,10 @@
 package com.azheng.boot.kb.controller;
 
-import com.azheng.boot.kb.request.CreateKbRequest;
-import com.azheng.boot.kb.request.KnowledgeBasePageRequest;
-import com.azheng.boot.kb.request.ReNameKbRequest;
+import com.azheng.boot.kb.controller.request.CreateKbRequest;
+import com.azheng.boot.kb.controller.request.KnowledgeBasePageRequest;
+import com.azheng.boot.kb.controller.request.ReNameKbRequest;
 import com.azheng.boot.kb.service.KnowledgeBaseService;
-import com.azheng.boot.kb.vo.KnowledgeBaseVO;
+import com.azheng.boot.kb.controller.vo.KnowledgeBaseVO;
 import com.azheng.framework.web.Result;
 import com.azheng.framework.web.Results;
 import com.baomidou.mybatisplus.core.metadata.IPage;

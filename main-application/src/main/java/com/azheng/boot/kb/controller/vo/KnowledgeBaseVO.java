@@ -1,4 +1,4 @@
-package com.azheng.boot.kb.vo;
+package com.azheng.boot.kb.controller.vo;
 
 
 import lombok.AllArgsConstructor;

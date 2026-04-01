@@ -1,4 +1,4 @@
-package com.azheng.boot.kb.request;
+package com.azheng.boot.kb.controller.request;
 
 
 import lombok.Data;
