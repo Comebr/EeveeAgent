@@ -33,7 +33,7 @@ const editingItem = ref({})
 const itemToDelete = ref(null)
 
 // 文档管理
-const activeTab = ref('knowledge') // knowledge 或 documents
+const activeTab = ref('knowledge') // knowledge 或 documents 或 chunks
 const selectedKnowledgeBase = ref(null)
 const documents = ref([])
 const showUploadModal = ref(false)
@@ -48,6 +48,37 @@ const documentPagination = reactive({
   current: 1,
   size: 10,
   total: 0
+})
+
+// 知识块管理
+const chunks = ref([])
+const selectedDocument = ref(null)
+const chunkPagination = reactive({
+  current: 1,
+  size: 10,
+  total: 0
+})
+const chunkSearchQuery = ref('')
+const chunkStatusFilter = ref('all')
+const selectAll = ref(false)
+const selectedChunks = ref([])
+
+// 分块弹窗
+const showChunkModal = ref(false)
+const chunkForm = reactive({
+  docId: '',
+  chunkStrategy: 'recursive',
+  maxChunkSize: 512,
+  maxOverlapSize: 0
+})
+const chunking = ref(false)
+
+// 编辑知识块弹窗
+const showEditChunkModal = ref(false)
+const editingChunk = ref({})
+const editForm = reactive({
+  id: '',
+  content: ''
 })
 
 // 消息提示
@@ -88,6 +119,17 @@ const documentColumns = [
   { key: 'chunkCount', title: '分块数' },
   { key: 'fileType', title: '类型' },
   { key: 'fileSize', title: '大小' },
+  { key: 'updateTime', title: '更新时间' },
+  { key: 'action', title: '操作', width: '160px' }
+]
+
+// 知识块表格列配置
+const chunkColumns = [
+  { key: 'index', title: '序号', width: '60px' },
+  { key: 'content', title: '内容' },
+  { key: 'status', title: '状态' },
+  { key: 'charCount', title: '字符数' },
+  { key: 'tokenCount', title: 'Token数' },
   { key: 'updateTime', title: '更新时间' },
   { key: 'action', title: '操作', width: '160px' }
 ]
@@ -170,6 +212,148 @@ watch(statusFilter, () => {
   }
 })
 
+// 导航到知识块管理
+const navigateToChunks = (doc) => {
+  selectedDocument.value = doc
+  activeTab.value = 'chunks'
+  loadChunks(doc.id)
+}
+
+// 加载知识块列表
+const loadChunks = async (docId) => {
+  try {
+    const params = {
+      docId: docId,
+      current: chunkPagination.current,
+      size: chunkPagination.size
+    }
+    
+    // 添加启用状态筛选参数
+    if (chunkStatusFilter.value !== 'all') {
+      params.enabled = chunkStatusFilter.value === 'enabled' ? '1' : '0'
+    }
+    
+    // 添加搜索文本参数（仅当不为空时）
+    if (chunkSearchQuery.value && chunkSearchQuery.value.trim()) {
+      params.chunkText = chunkSearchQuery.value.trim()
+    }
+    
+    const response = await axios.get('/kb/doc/chunk/pageQuery', { params })
+    
+    if (response.data.code === '0') {
+      chunks.value = response.data.data.records || []
+      chunkPagination.total = response.data.data.total || 0
+    } else {
+      showToast('获取知识块列表失败', 'error')
+    }
+  } catch (error) {
+    console.error('加载知识块失败:', error)
+    showToast('获取知识块列表失败，请稍后重试', 'error')
+  }
+}
+
+// 知识块分页变更
+const changeChunkPage = (page) => {
+  chunkPagination.current = page
+  if (selectedDocument.value) {
+    loadChunks(selectedDocument.value.id)
+  }
+}
+
+// 全选功能
+const handleSelectAll = () => {
+  selectAll.value = !selectAll.value
+  selectedChunks.value = selectAll.value ? chunks.value.map(chunk => chunk.id) : []
+}
+
+// 单个选择
+const handleSelectChunk = (id) => {
+  const index = selectedChunks.value.indexOf(id)
+  if (index > -1) {
+    selectedChunks.value.splice(index, 1)
+  } else {
+    selectedChunks.value.push(id)
+  }
+  selectAll.value = selectedChunks.value.length === chunks.value.length
+}
+
+// 编辑知识块
+const editChunk = (chunk) => {
+  editingChunk.value = { ...chunk }
+  editForm.id = chunk.id
+  editForm.content = chunk.chunkText || ''
+  showEditChunkModal.value = true
+}
+
+// 保存编辑内容
+const saveChunkEdit = async () => {
+  try {
+    const response = await axios.put('/kb/doc/chunk/mkdirText', {
+      chunkId: editForm.id,
+      chunkText: editForm.content
+    })
+
+    if (response.data.code === '0') {
+      showEditChunkModal.value = false
+      showToast('编辑成功', 'success')
+      // 重新加载知识块列表
+      if (selectedDocument.value) {
+        loadChunks(selectedDocument.value.id)
+      }
+    } else {
+      showToast(response.data.message || '编辑失败', 'error')
+    }
+  } catch (error) {
+    console.error('编辑知识块失败:', error)
+    showToast('编辑失败，请稍后重试', 'error')
+  }
+}
+
+// 取消编辑
+const cancelChunkEdit = () => {
+  showEditChunkModal.value = false
+  editingChunk.value = {}
+  editForm.id = ''
+  editForm.content = ''
+}
+
+// 切换知识块启用状态
+const toggleChunkEnabled = (chunk) => {
+  // 实现启用/禁用功能
+  console.log('切换知识块状态:', chunk)
+  // 这里应该调用后端API来切换状态
+  chunk.enabled = chunk.enabled === 1 ? 0 : 1
+}
+
+// 确认删除知识块
+const confirmDeleteChunk = async (id, content) => {
+  try {
+    const response = await axios.delete(`/kb/doc/chunk/deleteChunk/${id}`)
+    
+    if (response.data.code === '0') {
+      showToast('删除成功', 'success')
+      // 重新加载知识块列表
+      if (selectedDocument.value) {
+        loadChunks(selectedDocument.value.id)
+      }
+    } else {
+      showToast('删除失败', 'error')
+    }
+  } catch (error) {
+    console.error('删除知识块失败:', error)
+    showToast('删除失败，请稍后重试', 'error')
+  }
+}
+
+// 重置知识块筛选条件
+const resetChunkFilters = () => {
+  chunkStatusFilter.value = 'all'
+  chunkSearchQuery.value = ''
+  if (selectedDocument.value) {
+    loadChunks(selectedDocument.value.id)
+  }
+}
+
 // 防抖定时器
 let toggleDebounceTimer = null
 
@@ -222,6 +406,42 @@ const viewDocument = (doc) => {
 const downloadDocument = (doc) => {
   // 实现下载功能
   console.log('下载文档:', doc)
+}
+
+// 打开分块弹窗
+const openChunkModal = (doc) => {
+  chunkForm.docId = doc.id
+  chunkForm.chunkStrategy = 'recursive'
+  chunkForm.maxChunkSize = 512
+  chunkForm.maxOverlapSize = 0
+  showChunkModal.value = true
+}
+
+// 执行分块操作
+const startChunking = async () => {
+  chunking.value = true
+  try {
+    const response = await axios.post('/kb/doc/startChunk', {
+      docId: chunkForm.docId,
+      chunkOptions: {
+        maxChunkSize: chunkForm.maxChunkSize,
+        maxOverlapSize: chunkForm.maxOverlapSize
+      }
+    })
+    
+    if (response.data.code === '0') {
+      showChunkModal.value = false
+      showToast('分块成功', 'success')
+      loadDocuments(selectedKnowledgeBase.value.id)
+    } else {
+      showToast('分块失败', 'error')
+    }
+  } catch (error) {
+    console.error('分块失败:', error)
+    showToast('分块失败，请稍后重试', 'error')
+  } finally {
+    chunking.value = false
+  }
 }
 
 // 确认删除文档
@@ -523,6 +743,18 @@ const handleLogout = () => {
   router.push('/')
 }
 
+// 处理头像加载失败
+const handleAvatarError = (event) => {
+  // 头像加载失败时，隐藏图片，显示默认头像
+  event.target.style.display = 'none'
+  // 确保默认头像显示
+  const avatarElement = event.target.parentElement
+  const defaultAvatar = avatarElement.querySelector('span')
+  if (defaultAvatar) {
+    defaultAvatar.style.display = 'flex'
+  }
+}
+
 const goToHome = () => {
   router.push('/home')
 }
@@ -546,6 +778,574 @@ const changeDocumentPage = (page) => {
   loadDocuments(selectedKnowledgeBase.value.id)
 }
 </script>
+
+<style scoped>
+/* 批量操作按钮样式 */
+.batch-operations {
+  display: flex;
+  gap: 10px;
+  margin: 16px 0;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.batch-button {
+  padding: 8px 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background-color: #ffffff;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.batch-button:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+/* 知识块内容样式 */
+.chunk-content {
+  max-width: 400px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* 状态指示器样式 */
+.status-indicator {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-indicator.success {
+  background-color: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.status-indicator.warning {
+  background-color: #fffbe6;
+  color: #faad14;
+  border: 1px solid #ffe58f;
+}
+
+/* 表格操作按钮样式 */
+.table-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 面包屑导航样式 */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.breadcrumb-link {
+  color: #1890ff;
+  cursor: pointer;
+}
+
+.breadcrumb-link:hover {
+  text-decoration: underline;
+}
+
+.separator {
+  color: #999;
+}
+
+.current {
+  color: #666;
+}
+
+/* 知识块管理页面样式 */
+.chunk-management {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09);
+  padding: 24px;
+  margin-top: 20px;
+}
+
+.chunk-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.chunk-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.chunk-description {
+  font-size: 14px;
+  color: #666;
+  margin: 4px 0 0 0;
+}
+
+.header-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-back,
+.btn-rebuild {
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #e8e8e8;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-back:hover,
+.btn-rebuild:hover {
+  background-color: #e8e8e8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.add-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.add-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a409a 100%);
+}
+
+.btn-primary {
+  padding: 6px 20px;
+  border: none;
+  border-radius: 4px;
+  background: #1890ff;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+  font-weight: 500;
+}
+
+.btn-primary:hover {
+  background: #40a9ff;
+}
+
+.chunk-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.section-description {
+  font-size: 12px;
+  color: #666;
+  margin: 2px 0 0 0;
+}
+
+.controls-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.status-select {
+  padding: 4px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #666;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.btn-refresh {
+  padding: 4px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #666;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-refresh:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.btn-batch {
+  padding: 4px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #666;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.3s;
+}
+
+.btn-batch:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: white;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 2px;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 16px;
+  width: 100%;
+}
+
+.search-box:hover {
+  border-color: #d0d3d9;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.search-box input {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.3s ease;
+  background: transparent;
+}
+
+.search-box input:focus {
+  background-color: #f8f9fa;
+  box-shadow: inset 0 0 0 1px rgba(102, 126, 234, 0.1);
+  outline: none;
+}
+
+.search-box input::placeholder {
+  color: #999;
+  font-size: 14px;
+}
+
+.search-button {
+  padding: 8px;
+  background-color: transparent;
+  color: #999;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  margin: 0 8px;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 10px 16px;
+  padding-right: 40px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.search-button:hover {
+  background-color: #667eea;
+  color: white;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.chunk-list {
+  margin-top: 20px;
+}
+
+.chunk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.chunk-table th {
+  background: #fafafa;
+  text-align: left;
+  padding: 12px 16px;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.chunk-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: top;
+}
+
+.chunk-table tr:hover {
+  background: #f5f5f5;
+}
+
+.content-cell {
+  width: 400px;
+  height: 120px;
+  color: #333;
+  line-height: 1.4;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+}
+
+.content-display {
+  font-size: 14px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  max-width: 100%;
+}
+
+/* 状态节点样式 */
+.status-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.status-node::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-enabled {
+  background-color: #e6f7ff;
+  color: #006633;
+  border: 1px solid #91d5ff;
+}
+
+.status-enabled::before {
+  background-color: #006633;
+}
+
+.status-enabled:hover {
+  background-color: #bae7ff;
+  border-color: #69c0ff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 102, 51, 0.2);
+}
+
+.status-disabled {
+  background-color: #fff2e8;
+  color: #cc0000;
+  border: 1px solid #ffd591;
+}
+
+.status-disabled::before {
+  background-color: #cc0000;
+}
+
+.status-disabled:hover {
+  background-color: #fff1f0;
+  border-color: #ffccc7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(204, 0, 0, 0.2);
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-enabled {
+  background: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.status-disabled {
+  background: #fffbe6;
+  color: #faad14;
+  border: 1px solid #ffe58f;
+}
+
+.action-cell {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-edit {
+  padding: 4px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #666;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-edit:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.btn-toggle {
+  padding: 4px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #666;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.3s;
+}
+
+.btn-toggle:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.btn-delete {
+  padding: 4px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #ff4d4f;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-delete:hover {
+  border-color: #ff4d4f;
+  background: #fff1f0;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 0;
+  color: #999;
+  font-size: 14px;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.page-btn {
+  padding: 6px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #666;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.page-btn:hover:not(:disabled) {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-info {
+  font-size: 14px;
+  color: #666;
+}
+</style>
 
 <template>
   <div class="admin-container">
@@ -698,7 +1498,12 @@ const changeDocumentPage = (page) => {
           <div class="user-info">
             <div class="user-dropdown" @click="toggleUserDropdown">
               <div class="avatar">
-                <img v-if="userInfo?.avatar" :src="userInfo.avatar" alt="avatar" />
+                <img 
+                  v-if="userInfo?.avatar" 
+                  :src="userInfo.avatar" 
+                  alt="avatar"
+                  @error="handleAvatarError"
+                />
                 <span v-else>{{ userInfo?.username?.charAt(0).toUpperCase() || 'A' }}</span>
               </div>
               <span class="username">{{ userInfo?.username || 'admin' }}</span>
@@ -725,10 +1530,13 @@ const changeDocumentPage = (page) => {
       <div class="breadcrumb">
         <span class="breadcrumb-link" @click="setActiveMenu('overview')">首页</span>
         <span class="separator">/</span>
-        <span v-if="activeMenu === 'knowledge' && activeTab === 'documents'" class="breadcrumb-link" @click="activeTab = 'knowledge'">知识库管理</span>
+        <span v-if="activeMenu === 'knowledge' && (activeTab === 'documents' || activeTab === 'chunks')" class="breadcrumb-link" @click="activeTab = 'knowledge'">知识库管理</span>
         <span v-else class="current">{{ activeMenu === 'overview' ? '数据概览' : activeMenu === 'knowledge' ? '知识库管理' : activeMenu === 'users' ? '用户管理' : '系统设置' }}</span>
-        <span v-if="activeMenu === 'knowledge' && activeTab === 'documents'" class="separator">/</span>
-        <span v-if="activeMenu === 'knowledge' && activeTab === 'documents'" class="current">文档管理</span>
+        <span v-if="activeMenu === 'knowledge' && (activeTab === 'documents' || activeTab === 'chunks')" class="separator">/</span>
+        <span v-if="activeMenu === 'knowledge' && activeTab === 'chunks'" class="breadcrumb-link" @click="activeTab = 'documents'">文档管理</span>
+        <span v-else-if="activeMenu === 'knowledge' && activeTab === 'documents'" class="current">文档管理</span>
+        <span v-if="activeMenu === 'knowledge' && activeTab === 'chunks'" class="separator">/</span>
+        <span v-if="activeMenu === 'knowledge' && activeTab === 'chunks'" class="current">知识块管理</span>
       </div>
       
       <!-- 内容区域 -->
@@ -754,7 +1562,12 @@ const changeDocumentPage = (page) => {
                     v-model="searchQuery"
                     @keyup.enter="fetchKnowledgeList"
                   />
-                  <button class="search-button" @click="fetchKnowledgeList">搜索</button>
+                  <button class="search-button" @click="fetchKnowledgeList">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="11" cy="11" r="8"/>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                  </button>
                 </div>
                 <button class="refresh-button" @click="refreshKnowledgeList" :disabled="loading">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ 'spin': loading }">
@@ -780,14 +1593,11 @@ const changeDocumentPage = (page) => {
                 <template #default>
                   <div class="card-content">
                     <div class="card-icon">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="4" y="4" width="16" height="20" rx="2" ry="2"/>
-                        <rect x="6" y="6" width="12" height="4" fill="#1E293B"/>
-                        <circle cx="9" cy="8" r="1" fill="currentColor"/>
-                        <rect x="6" y="12" width="12" height="4" fill="#1E293B"/>
-                        <circle cx="9" cy="14" r="1" fill="currentColor"/>
-                        <rect x="6" y="18" width="12" height="4" fill="#1E293B"/>
-                        <circle cx="9" cy="20" r="1" fill="currentColor"/>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="4" y="4" width="16" height="16" rx="2" ry="2"/>
+                        <line x1="8" y1="8" x2="16" y2="8"/>
+                        <line x1="8" y1="12" x2="16" y2="12"/>
+                        <line x1="8" y1="16" x2="12" y2="16"/>
                       </svg>
                     </div>
                     <div class="card-value">{{ pagination.total }}</div>
@@ -799,12 +1609,9 @@ const changeDocumentPage = (page) => {
                 <template #default>
                   <div class="card-content">
                     <div class="card-icon">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10 9 9 9 8 9"/>
                       </svg>
                     </div>
                     <div class="card-value">0</div>
@@ -816,7 +1623,7 @@ const changeDocumentPage = (page) => {
                 <template #default>
                   <div class="card-content">
                     <div class="card-icon">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"/>
                         <line x1="12" y1="8" x2="12" y2="12"/>
                         <line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -831,11 +1638,9 @@ const changeDocumentPage = (page) => {
                 <template #default>
                   <div class="card-content">
                     <div class="card-icon">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                         <circle cx="9" cy="7" r="4"/>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                       </svg>
                     </div>
                     <div class="card-value">1</div>
@@ -865,14 +1670,14 @@ const changeDocumentPage = (page) => {
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                       </svg>
-                      编辑
                     </BaseButton>
                     <BaseButton type="danger" size="small" @click="handleDeleteClick(row)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="3 6 5 6 21 6"/>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        <line x1="10" y1="11" x2="10" y2="17"/>
+                        <line x1="14" y1="11" x2="14" y2="17"/>
                       </svg>
-                      删除
                     </BaseButton>
                   </div>
                 </template>
@@ -952,6 +1757,9 @@ const changeDocumentPage = (page) => {
                   :pageSize="documentPagination.size"
                   @page-change="changeDocumentPage"
                 >
+                  <template #documentName="{ row }">
+                    <a href="#" class="kb-name-link" @click.prevent="navigateToChunks(row)">{{ row.documentName }}</a>
+                  </template>
                   <template #source="{ row }">
                     Local File
                   </template>
@@ -968,7 +1776,7 @@ const changeDocumentPage = (page) => {
                     </label>
                   </template>
                   <template #chunkCount="{ row }">
-                    8
+                    <a href="#" class="kb-name-link" @click.prevent="navigateToChunks(row)">{{ row.chunkCount || 0 }}</a>
                   </template>
                   <template #fileType="{ row }">
                     <span class="file-type-tag">{{ getMimeTypeSubtype(row.fileType) }}</span>
@@ -987,17 +1795,10 @@ const changeDocumentPage = (page) => {
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                         </svg>
                       </BaseButton>
-                      <BaseButton type="secondary" size="small" @click="viewDocument(row)">
+                      <BaseButton type="info" size="small" @click="openChunkModal(row)">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                           <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                      </BaseButton>
-                      <BaseButton type="secondary" size="small" @click="downloadDocument(row)">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                          <polyline points="7 10 12 15 17 10"/>
-                          <line x1="12" y1="15" x2="12" y2="3"/>
+                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                         </svg>
                       </BaseButton>
                       <BaseButton type="danger" size="small" @click="confirmDeleteDocument(row.id, row.documentName)">
@@ -1011,6 +1812,160 @@ const changeDocumentPage = (page) => {
                     </div>
                   </template>
                 </BaseTable>
+              </div>
+            </div>
+          </div>
+          <div v-else-if="activeTab === 'chunks'">
+            <!-- 页面头部 -->
+            <div class="page-header">
+              <div class="header-left">
+                <h1 class="page-title">
+                  分块管理
+                  <span class="kb-name-title">{{ selectedDocument?.documentName ? ' · ' + selectedDocument.documentName : '' }}</span>
+                  <span class="kb-id-title">{{ selectedDocument?.kbId ? ' (知识库: ' + selectedDocument.kbId + ')' : '' }}</span>
+                </h1>
+              </div>
+              <div class="header-right">
+                <button class="btn-back" @click="activeTab = 'documents'">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                  </svg>
+                  返回文档
+                </button>
+                <button class="btn-rebuild">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12c0-4.97-4.03-9-9-9s-9 4.03-9 9 4.03 9 9 9"/>
+                    <path d="M15 12l-3-3-3 3"/>
+                    <path d="M9 12l3 3 3-3"/>
+                  </svg>
+                  重建分块
+                </button>
+                <button class="add-button">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  新建分块
+                </button>
+              </div>
+            </div>
+
+            <!-- 知识块管理 -->
+            <div class="chunk-management">
+              <!-- 搜索和筛选 -->
+              <div class="search-filter">
+                <div class="search-box">
+                  <input 
+                    type="text" 
+                    v-model="chunkSearchQuery" 
+                    placeholder="搜索知识块内容"
+                    @keyup.enter="loadChunks(selectedDocument.id)"
+                  />
+                  <button class="search-button" @click="loadChunks(selectedDocument.id)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="11" cy="11" r="8"/>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                  </button>
+                </div>
+                <div class="filter-box">
+                  <select v-model="chunkStatusFilter" class="status-select" @change="loadChunks(selectedDocument.id)">
+                    <option value="all">全部状态</option>
+                    <option value="enabled">启用</option>
+                    <option value="disabled">禁用</option>
+                  </select>
+                  <button class="refresh-button" @click="loadChunks(selectedDocument.id)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                    </svg>
+                    刷新
+                  </button>
+                  <button class="btn-batch">批量启用</button>
+                  <button class="btn-batch">批量禁用</button>
+                  <button class="btn-batch">全部启用</button>
+                  <button class="btn-batch">全部禁用</button>
+                </div>
+              </div>
+
+              <!-- 知识块列表 -->
+              <div class="chunk-list">
+                <table class="chunk-table">
+                  <thead>
+                    <tr>
+                      <th><input type="checkbox" v-model="selectAll" @change="handleSelectAll" /></th>
+                      <th>序号</th>
+                      <th>内容</th>
+                      <th>状态</th>
+                      <th>字符数</th>
+                      <th>Token数</th>
+                      <th>更新时间</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, index) in chunks" :key="row.id">
+                      <td><input type="checkbox" :checked="selectedChunks.includes(row.id)" @change="handleSelectChunk(row.id)" /></td>
+                      <td>{{ (chunkPagination.current - 1) * chunkPagination.size + index + 1 }}</td>
+                      <td class="content-cell">
+                        <div class="content-display">
+                          {{ row.chunkText || '' }}
+                        </div>
+                      </td>
+                      <td>
+                        <span class="status-node {{ row.enabled === 1 ? 'status-enabled' : 'status-disabled' }}">
+                          {{ row.enabled === 1 ? '启用' : '禁用' }}
+                        </span>
+                      </td>
+                      <td>{{ row.charCount || 0 }}</td>
+                      <td>{{ row.tokenCount || 0 }}</td>
+                      <td>{{ formatDate(row.updateTime) }}</td>
+                      <td class="action-cell">
+                        <div class="table-actions">
+                          <BaseButton type="primary" size="small" @click="editChunk(row)">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                          </BaseButton>
+                          <BaseButton type="danger" size="small" @click="confirmDeleteChunk(row.id, row.chunkText)">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <polyline points="3 6 5 6 21 6"/>
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                              <line x1="10" y1="11" x2="10" y2="17"/>
+                              <line x1="14" y1="11" x2="14" y2="17"/>
+                            </svg>
+                          </BaseButton>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr v-if="chunks.length === 0">
+                      <td colspan="8" class="empty-state">
+                        暂无数据
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <!-- 分页 -->
+                <div class="pagination">
+                  <button 
+                    class="page-btn" 
+                    :disabled="chunkPagination.current === 1" 
+                    @click="changeChunkPage(chunkPagination.current - 1)"
+                  >
+                    上一页
+                  </button>
+                  <span class="page-info">
+                    {{ chunkPagination.current }} / {{ Math.ceil(chunkPagination.total / chunkPagination.size) }}
+                  </span>
+                  <button 
+                    class="page-btn" 
+                    :disabled="chunkPagination.current === Math.ceil(chunkPagination.total / chunkPagination.size)" 
+                    @click="changeChunkPage(chunkPagination.current + 1)"
+                  >
+                    下一页
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1243,6 +2198,90 @@ const changeDocumentPage = (page) => {
         <div class="modal-footer">
           <button class="cancel-button" @click="handleDocumentDeleteCancel">取消</button>
           <button class="delete-confirm-button" @click="handleDocumentDeleteConfirm">删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 启动分块弹窗 -->
+    <div v-if="showChunkModal" class="modal-overlay" @click.self="showChunkModal = false">
+      <div class="modal-content chunk-modal">
+        <div class="modal-header">
+          <h3>启动分块</h3>
+          <button class="close-button" @click="showChunkModal = false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>分块策略 <span class="required">*</span></label>
+            <select v-model="chunkForm.chunkStrategy" class="form-select">
+              <option value="recursive">递归算法分块</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>最大分块大小 (maxChunkSize) <span class="required">*</span></label>
+            <input 
+              v-model.number="chunkForm.maxChunkSize" 
+              type="number" 
+              class="form-input"
+              placeholder="请输入最大分块大小"
+              min="100"
+              max="5000"
+            />
+          </div>
+          <div class="form-group">
+            <label>最大重叠大小 (maxOverlapSize) <span class="required">*</span></label>
+            <input 
+              v-model.number="chunkForm.maxOverlapSize" 
+              type="number" 
+              class="form-input"
+              placeholder="请输入最大重叠大小"
+              min="0"
+              max="500"
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-button" @click="showChunkModal = false" :disabled="chunking">取消</button>
+          <button class="confirm-button" @click="startChunking" :disabled="chunking">
+            <svg v-if="chunking" class="loading-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"/>
+            </svg>
+            {{ chunking ? '分块中...' : '启动分块' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 编辑知识块弹窗 -->
+    <div v-if="showEditChunkModal" class="modal-overlay" @click.self="cancelChunkEdit">
+      <div class="modal-content edit-chunk-modal">
+        <div class="modal-header">
+          <h3>编辑知识块</h3>
+          <button class="close-button" @click="cancelChunkEdit">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>知识块内容</label>
+            <textarea 
+              v-model="editForm.content" 
+              class="form-textarea"
+              placeholder="请输入知识块内容"
+              rows="10"
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-button" @click="cancelChunkEdit">取消</button>
+          <button class="confirm-button" @click="saveChunkEdit">保存</button>
         </div>
       </div>
     </div>
@@ -1701,12 +2740,12 @@ const changeDocumentPage = (page) => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 24px;
-  background-color: white;
-  border-radius: 8px 8px 0 0;
-  border-bottom: 1px solid #e8e8e8;
-  margin-bottom: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 0 24px 16px;
+  background-color: transparent;
+  border-radius: 0;
+  border-bottom: none;
+  margin-bottom: 16px;
+  box-shadow: none;
 }
 
 .page-header .header-left h2 {
@@ -1725,55 +2764,72 @@ const changeDocumentPage = (page) => {
 .page-header .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .page-header .search-box {
   display: flex;
   align-items: center;
-  gap: 0;
-  border: 1px solid #e8e8e8;
-  border-radius: 6px;
-  overflow: hidden;
-  height: 32px;
+  gap: 8px;
   background-color: white;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 0;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  height: 40px;
+  margin: 0;
 }
 
 .page-header .search-box input {
+  flex: 1;
+  padding: 0 16px;
   border: none;
-  outline: none;
-  padding: 0 10px;
+  border-radius: 8px 0 0 8px;
   font-size: 14px;
-  color: #333;
+  outline: none;
+  transition: all 0.3s ease;
+  background: transparent;
   width: 180px;
   height: 100%;
 }
 
-.page-header .search-box input::placeholder {
-  color: #999;
-}
-
-.search-button {
+.page-header .search-button {
   padding: 0 16px;
-  background-color: #f5f7fa;
+  background-color: transparent;
+  color: #999;
   border: none;
   border-left: 1px solid #e8e8e8;
-  color: #666;
-  font-size: 14px;
-  font-weight: 500;
+  border-radius: 0 8px 8px 0;
   cursor: pointer;
-  height: 100%;
   transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
 }
 
-.search-button:hover {
-  background-color: #667eea;
-  color: white;
-  border-left-color: #667eea;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+.page-header .search-box:hover {
+  border-color: #d0d3d9;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.page-header .search-box input:focus {
+  background-color: #f8f9fa;
+  box-shadow: inset 0 0 0 1px rgba(102, 126, 234, 0.1);
+  outline: none;
+}
+
+.page-header .search-box input::placeholder {
+  color: #999;
+  font-size: 14px;
+}
+
+.refresh-button, .add-button {
+  height: 40px;
+  align-items: center;
 }
 
 .refresh-button {
@@ -1850,66 +2906,49 @@ const changeDocumentPage = (page) => {
 /* 数据卡片 */
 .data-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
   padding: 0 24px 24px;
   margin-bottom: 20px;
 }
 
 .card {
-  background: linear-gradient(135deg, white 0%, #fafbff 100%);
-  border-radius: 10px;
-  padding: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
   gap: 16px;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  border: 1px solid #e8e8e8;
+  border: 1px solid #f0f0f0;
   position: relative;
   overflow: hidden;
 }
 
 .card:hover {
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
-  transform: translateY(-4px);
-  border-color: #667eea;
-}
-
-.card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 4px;
-  height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 12px 0 0 12px;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.card:hover::before {
-  opacity: 1;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.1);
+  transform: translateY(-2px);
+  border-color: #e8e8e8;
 }
 
 .card-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #f0f4ff 0%, #e6f7ff 100%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #667eea;
+  color: white;
   flex-shrink: 0;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
 }
 
 .card:hover .card-icon {
-  transform: scale(1.1);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.2);
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.3);
 }
 
 .card-content {
@@ -1917,10 +2956,10 @@ const changeDocumentPage = (page) => {
 }
 
 .card-value {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   color: #333;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   transition: color 0.3s ease;
 }
 
@@ -1929,34 +2968,9 @@ const changeDocumentPage = (page) => {
 }
 
 .card-label {
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 8px;
-}
-
-.card-action {
   font-size: 13px;
   color: #999;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.card-action:hover {
-  color: #667eea;
-  transform: translateX(4px);
-}
-
-.card-action::after {
-  content: '→';
-  font-size: 12px;
-  transition: transform 0.3s ease;
-}
-
-.card-action:hover::after {
-  transform: translateX(2px);
+  margin-bottom: 0;
 }
 
 /* 知识库表格 */
@@ -2437,8 +3451,24 @@ const changeDocumentPage = (page) => {
 .delete-hint {
   font-size: 14px;
   color: #999;
-  margin-bottom: 0;
+}
+
+/* 分块弹窗 */
+.chunk-modal {
+  width: 450px;
+}
+
+.form-hint {
+  font-size: 12px;
+  color: #666;
+  margin-top: 6px;
   line-height: 1.4;
+}
+
+.loading-icon {
+  animation: spin 1s linear infinite;
+  margin-right: 8px;
+  display: inline-block;
 }
 
 .delete-confirm-button {
@@ -2794,7 +3824,8 @@ const changeDocumentPage = (page) => {
 }
 
 /* 文档页面头部 */
-.document-management .page-header {
+.document-management .page-header,
+.page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2803,7 +3834,8 @@ const changeDocumentPage = (page) => {
   border-bottom: 1px solid #e8e8e8;
 }
 
-.document-management .header-left h1 {
+.document-management .header-left h1,
+.header-left h1 {
   font-size: 24px;
   font-weight: 600;
   color: #333;
@@ -2813,20 +3845,26 @@ const changeDocumentPage = (page) => {
   gap: 8px;
 }
 
-.document-management .kb-name-title {
+.document-management .kb-name-title,
+.kb-name-title,
+.kb-id-title {
   font-size: 16px;
   font-weight: 500;
   color: #666;
   margin-left: 8px;
 }
 
-.document-management .header-right {
+.document-management .header-right,
+.chunk-management .header-right {
   display: flex;
   gap: 12px;
 }
 
 .back-button,
-.upload-button {
+.upload-button,
+.btn-back,
+.btn-rebuild,
+.add-button {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2915,9 +3953,9 @@ const changeDocumentPage = (page) => {
 }
 
 .search-button {
-  padding: 8px 12px;
-  background-color: #667eea;
-  color: white;
+  padding: 8px;
+  background-color: transparent;
+  color: #999;
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -2925,12 +3963,14 @@ const changeDocumentPage = (page) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
+  min-width: 32px;
+  height: 32px;
+  margin: 0 8px;
 }
 
 .search-button:hover {
-  background-color: #5a6fd8;
-  transform: translateY(-1px);
+  background-color: #667eea;
+  color: white;
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
@@ -3317,6 +4357,32 @@ input:checked + .slider:before {
   cursor: not-allowed;
   background-color: #f5f5f5;
   color: #666;
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  transition: all 0.3s ease;
+  line-height: 1.4;
+  background-color: #fafafa;
+  color: #333;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  background-color: white;
+}
+
+.edit-chunk-modal {
+  width: 600px;
+  max-width: 90vw;
 }
 
 .progress-text {
