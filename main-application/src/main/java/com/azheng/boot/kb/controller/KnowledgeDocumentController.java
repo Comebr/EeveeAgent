@@ -1,6 +1,7 @@
 package com.azheng.boot.kb.controller;
 
 import com.azheng.boot.kb.controller.request.PageQueryDocByKbIdRequest;
+import com.azheng.boot.kb.controller.request.StartChunkRequest;
 import com.azheng.boot.kb.controller.vo.KnowledgeDocumentVO;
 import com.azheng.boot.kb.service.KnowledgeDocumentService;
 import com.azheng.framework.web.Result;
@@ -18,8 +19,7 @@ public class KnowledgeDocumentController {
     private KnowledgeDocumentService knowledgeDocumentService;
 
     /**
-     * 目前只支持单文件上传
-     * TODO扩展多文件上传
+     * 本地单文件上传
      */
     @PostMapping("/upload")
     public Result<Void> upload(@RequestParam("file") MultipartFile file, @RequestParam("kbId") String kbId) {
@@ -55,6 +55,15 @@ public class KnowledgeDocumentController {
     @PostMapping("/switch")
     public Result<Void> updateEnabled(String docId, boolean enabled){
         knowledgeDocumentService.setEnabled(docId, enabled);
+        return Results.success();
+    }
+
+    /**
+     * 启动分块
+     */
+    @PostMapping("/startChunk")
+    public Result<Void> runChunk(@RequestBody StartChunkRequest startChunkRequest){
+        knowledgeDocumentService.startChunking(startChunkRequest);
         return Results.success();
     }
 }

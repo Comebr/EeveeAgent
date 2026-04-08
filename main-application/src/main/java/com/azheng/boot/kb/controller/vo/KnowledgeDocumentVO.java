@@ -17,7 +17,7 @@ public class KnowledgeDocumentVO {
     private String kbId;
     private String documentName;
     private String fileType;
-    private Long filSize;
+    private Long fileSize;
     private String createBy;
     private Date updateTime;
     private Integer enabled;

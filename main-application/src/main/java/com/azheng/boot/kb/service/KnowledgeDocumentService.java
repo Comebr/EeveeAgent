@@ -1,6 +1,7 @@
 package com.azheng.boot.kb.service;
 
 import com.azheng.boot.kb.controller.request.PageQueryDocByKbIdRequest;
+import com.azheng.boot.kb.controller.request.StartChunkRequest;
 import com.azheng.boot.kb.controller.vo.KnowledgeDocumentVO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,16 +31,16 @@ public interface KnowledgeDocumentService {
      */
     void setEnabled(String docId, boolean enabled);
 
+    /**
+     * 启动分块
+     */
+    void startChunking(StartChunkRequest startChunkRequest);
 
     /**
      * 编辑文档信息
      * 目前只支持修改数据库中存的documentName
      */
 
-
-    /**
-     * 进行文档分块
-     */
 
     /**
      * 文件下载到本地
