@@ -230,7 +230,7 @@ public class ChatController {
 
 ## 二.RAG全流程构建
 
-### 1.知识库
+### 1.知识库底座开发
 
 > 用户的垂直领域知识是大模型所不具备的，大模型预训练的数据都是通识，对于特定领域，模型没有详细的参考，因此构建知识库是整个RAG的基层，也称index阶段
 
@@ -653,17 +653,199 @@ CREATE TABLE `knowledge_chunk` (
 
 
 
-#### 1.5 文档解析
+### 2. 文档预处理
+
+
+
+分析流程：
+
+1.文档准入校验：格式白名单、检测恶意文件、损坏、空、加密文件
+
+2.文件上传至RustFS
+
+3.Tika文档解析：识别文件类型、统一解析、提取出纯文本内容
+
+4,原始文本初级清理：剔除无意义格式符号、统一编码
+
+5.深度文本清洗：水印、版权声明、广告，去重、错别字
+
+6.文本结构化与语义规整
+
+7.元数据提取
+
+8.文本切片：按语义边界切分或按固定长度
+
+9.分块后质检过滤：过滤空、短、噪声块
+
+10.向量化前置处理：文本归一化、超长内容截断、提交给Embedding模型
+
+
+
+#### 2.1 文件注入校验
+
+前端：文件格式和大小检查
+
+后端：com.azheng.boot.kb.service.FileValidationService
 
 
 
 
 
-#### 1.6 文本切割
+
+
+#### 2.2 文件上传
+
+```java
+/**
+ * 文件上传：
+ * 1.文件准入校验
+ * 2.文件上传至RustFS
+ */
+@Override
+public void uploadFile(MultipartFile file, String kbId){
+    // 1.文件准入校验
+    try {
+        FileValidationService.validateFile(file);
+    } catch (Exception e) {
+        throw new RuntimeException(e);
+    }
+    Assert.notNull(kbId ,() -> new ClientException("知识库ID不能为空！"));
+    String filename = file.getOriginalFilename();
+    // 2.生成唯一key
+    UUID uuid = UUID.randomUUID();
+    String key = "uploadFile/"+uuid+"/"+filename;
+    // 3.构建putObjectRequest
+    PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+            .bucket(BUCKET_NAME)
+            .key(key)
+            .contentType(file.getContentType())
+            .build();
+    // 4.将InputStream传给RustFS
+    try(InputStream inputStream = file.getInputStream()){
+        RustFsClient.putObject(putObjectRequest, RequestBody.fromInputStream(inputStream, file.getSize()));
+
+        // 5.存储记录进MySQL（fileUrl暂时不设置）
+        KnowledgeDocumentPO documentPO = KnowledgeDocumentPO
+                .builder()
+                .documentName(filename)
+                .fileType(file.getContentType())
+                .fileSize(file.getSize())
+                .kbId(Long.valueOf(kbId))
+                .createBy(UserContext.getUsername())
+                .build();
+        knowledgeDocumentMapper.insert(documentPO);
+
+        // 6.记录文件映射
+        FileToRustFSLogPO rustFSLogPO = FileToRustFSLogPO.builder()
+                .docId(documentPO.getId())
+                .rustfsKey(key)
+                .build();
+        fileTORustFSLogMapper.insert(rustFSLogPO);
+    } catch (IOException e) {
+        throw new RuntimeException(e);
+    }
+}
+```
 
 
 
-#### 1.7 向量化
+#### 2.3 文档解析
+
+引入Apache Tika 依赖
+
+```xml
+<dependency>
+    <groupId>org.apache.tika</groupId>
+    <artifactId>tika-parsers-standard-package</artifactId>
+</dependency>
+
+<dependency>
+    <groupId>org.apache.tika</groupId>
+    <artifactId>tika-core</artifactId>
+</dependency>
+```
+
+
+
+```java
+//核心代码：
+    private static final Tika TIKA = new Tika();
+	String text = TIKA.parseToString(byteArrayInputStream);
+```
+
+- 文档解析的核心就是：parseToString得到纯文本
+
+  
+
+#### 2.4 文本清理
+
+推荐在解析时引入文本清理方法
+
+
+
+#### 2.5 文本分块
+
+1.ChunkMode：创建策略枚举，定义分块策略
+
+2.VectorChunk：分块后的结果类（为向量化预备）
+
+其实主要字段就是切割后的知识块内容与向量化信息
+
+```java
+/**
+ * 分块结果类
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class VectorChunk {
+    /**
+     * 分块ID
+     */
+    private String id;
+    /**
+     * 知识块内容
+     */
+    private String content;
+    /**
+     * 知识库索引（从0开始）
+     */
+    private int index;
+    /**
+     * 块的向量嵌入表示
+     * 用于向量相似度检索的浮点数数组
+     */
+    private float[] embedding;
+    /**
+     * 块的元数据信息
+     */
+    private String metadata;
+}
+```
+
+3.ChunkConfig：分块参数配置
+
+```java
+@Builder
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class ChunkConfig {
+
+    /**
+     * 块的目标大小（字符数）
+     */
+    @Builder.Default
+    private Integer chunkSize = 512;
+
+    /**
+     * 相邻块之间的重叠大小
+     */
+    @Builder.Default
+    private Integer overlapSize = 128;
+}
+```
 
 
 
@@ -673,24 +855,22 @@ CREATE TABLE `knowledge_chunk` (
 
 
 
+4.ChunkingStrategy：定义分块器的统一分块能力
+
+主要功能：文本切割
+
+```java
+    /**
+     * 进行文本切割
+     * @param text 原始文本
+     * @param config 分块参数
+     * @return
+     */
+List<VectorChunk> split(String text, ChunkConfig config);
+```
 
 
 
 
 
-
-| 接口名           | UserUpdateService                                            |                                                              |
-| ---------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| **接口请求地址** | [www.baidu.com](https://link.juejin.cn/?target=http%3A%2F%2Fwww.baidu.com) |                                                              |
-| **功能说明**     | UserUpdateService接口是应用系统的账号修改方法                |                                                              |
-| **请求参数**     | **参数名**                                                   | **中文说明**                                                 |
-|                  | RequestId                                                    | 平台每次调用生成的随机ID，应用系统每次响应返回此ID，String类型 |
-|                  | uid                                                          | 三方应用系统账号创建时，返回给应用系统的账号主键uid。**必传字段** |
-|                  | loginName/ fullName                                          | 需要修改的账号字段属性                                       |
-| **响应参数**     | **参数名**                                                   | **中文说明**                                                 |
-|                  | RequestId                                                    | 平台每次调用接口发送的请求ID，字段为String类型               |
-|                  | resultCode                                                   | 接口调用处理的结果码，**0为正常处理**，其它值由应用系统定义。字段为String类型，**必传字段**。 |
-|                  | message                                                      | 接口调用处理的信息。字段为String类型                         |
-| **请求示例：**   | { “token”,””, “treeCode”,” EXECUTIVE”, “code”,””}            | markdown展示不是很好看，建议word                             |
-| **返回值**       | { "xxxx": "xxxxxx", "resultCode": "0", "message": "success" } | markdown展示不是很好看，建议word                             |
-
+5.实现固定大小分块逻辑
