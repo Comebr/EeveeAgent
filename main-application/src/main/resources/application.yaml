@@ -50,18 +50,6 @@ langchain4j:
   community:
   # --OpenAI
   open-ai:
-    # -流式输出模型 qwen-flash
-    streaming-chat-model:
-      api-key: ${BAILIAN_API_KEY}
-      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      model-name: qwen-flash
-
-    # -文本向量模型 text-embedding-v4
-    embedding-model:
-      api-key: ${BAILIAN_API_KEY}
-      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      model-name: text-embedding-v4
-      dimensions: 4096
 
 #---Milvus 向量数据库配置---
 milvus:
