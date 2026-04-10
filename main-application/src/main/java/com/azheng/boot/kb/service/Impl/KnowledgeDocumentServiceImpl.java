@@ -8,9 +8,11 @@ import com.azheng.boot.kb.controller.request.StartChunkRequest;
 import com.azheng.boot.kb.controller.vo.KnowledgeDocumentVO;
 import com.azheng.boot.kb.dao.mapper.FileTORustFSLogMapper;
 import com.azheng.boot.kb.dao.mapper.KnowledgeBaseMapper;
+import com.azheng.boot.kb.dao.mapper.KnowledgeChunkMapper;
 import com.azheng.boot.kb.dao.mapper.KnowledgeDocumentMapper;
 import com.azheng.boot.kb.dao.po.FileToRustFSLogPO;
 import com.azheng.boot.kb.dao.po.KnowledgeBasePO;
+import com.azheng.boot.kb.dao.po.KnowledgeChunkPO;
 import com.azheng.boot.kb.dao.po.KnowledgeDocumentPO;
 import com.azheng.boot.kb.service.FileValidationService;
 import com.azheng.boot.kb.service.KnowledgeDocumentService;
@@ -18,6 +20,7 @@ import com.azheng.framework.context.UserContext;
 import com.azheng.framework.exception.ClientException;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.annotation.Resource;
 import org.springframework.beans.BeanUtils;
@@ -43,6 +46,9 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
     @Resource
     private KnowledgeDocumentMapper knowledgeDocumentMapper;
+
+    @Resource
+    private KnowledgeChunkMapper knowledgeChunkMapper;
 
     @Resource
     private KnowledgeBaseMapper knowledgeBaseMapper;
@@ -142,12 +148,18 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
      */
     @Override
     public void deleteFile(String docId) {
-        // 数据库记录禁用
-        KnowledgeDocumentPO knowledgeDocumentPO = knowledgeDocumentMapper.selectById(docId);
-        Assert.notNull(knowledgeDocumentPO ,() -> new ClientException("该文档不存在"));
-        knowledgeDocumentPO.setDel_flag(1);
-        knowledgeDocumentPO.setUpdateBy(UserContext.getUsername());
-        knowledgeDocumentMapper.updateById(knowledgeDocumentPO);
+        //文档表记录删除
+        knowledgeDocumentMapper.update(Wrappers
+                                        .<KnowledgeDocumentPO>lambdaUpdate()
+                                        .eq(KnowledgeDocumentPO::getId, docId)
+                                        .set(KnowledgeDocumentPO::getDel_flag,1)
+        );
+        //归属知识块删除
+        knowledgeChunkMapper.update(Wrappers
+                                    .<KnowledgeChunkPO>lambdaUpdate()
+                                    .eq(KnowledgeChunkPO::getDocId, docId)
+                                    .set(KnowledgeChunkPO::getDel_flag,1)
+        );
     }
 
     /**
