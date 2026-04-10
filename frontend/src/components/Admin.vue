@@ -81,6 +81,16 @@ const editForm = reactive({
   content: ''
 })
 
+// 新建知识块弹窗
+const showCreateChunkModal = ref(false)
+const createChunkForm = reactive({
+  chunkText: ''
+})
+
+// 字符数和Token数
+const charCount = ref(0)
+const tokenCount = ref(0)
+
 // 消息提示
 const showMessage = ref(false)
 const messageText = ref('')
@@ -89,7 +99,7 @@ const messageType = ref('success')
 // 创建表单
 const createForm = reactive({
   kbName: '',
-  embeddingModel: 'qwen-embedding',
+  embeddingModel: 'text-embedding-v4',
   collection: ''
 })
 
@@ -228,16 +238,6 @@ const loadChunks = async (docId) => {
       size: chunkPagination.size
     }
     
-    // 添加启用状态筛选参数
-    if (chunkStatusFilter.value !== 'all') {
-      params.enabled = chunkStatusFilter.value === 'enabled' ? '1' : '0'
-    }
-    
-    // 添加搜索文本参数（仅当不为空时）
-    if (chunkSearchQuery.value && chunkSearchQuery.value.trim()) {
-      params.chunkText = chunkSearchQuery.value.trim()
-    }
-    
     const response = await axios.get('/kb/doc/chunk/pageQuery', { params })
     
     if (response.data.code === '0') {
@@ -255,6 +255,15 @@ const loadChunks = async (docId) => {
 // 知识块分页变更
 const changeChunkPage = (page) => {
   chunkPagination.current = page
+  if (selectedDocument.value) {
+    loadChunks(selectedDocument.value.id)
+  }
+}
+
+// 知识块每页显示条数变更
+const handleChunkPageSizeChange = (size) => {
+  chunkPagination.size = size
+  chunkPagination.current = 1
   if (selectedDocument.value) {
     loadChunks(selectedDocument.value.id)
   }
@@ -317,6 +326,98 @@ const cancelChunkEdit = () => {
   editForm.content = ''
 }
 
+// 打开新建知识块弹窗
+const openCreateChunkModal = () => {
+  createChunkForm.chunkText = ''
+  charCount.value = 0
+  tokenCount.value = 0
+  showCreateChunkModal.value = true
+}
+
+// 处理新建知识块弹窗关闭
+const handleCreateChunkModalClose = () => {
+  showCreateChunkModal.value = false
+  createChunkForm.chunkText = ''
+  charCount.value = 0
+  tokenCount.value = 0
+}
+
+// 更新字符数和Token数
+const updateCharCount = () => {
+  const text = createChunkForm.chunkText
+  charCount.value = text.length
+  tokenCount.value = estimateTokenCount(text)
+}
+
+// 估算Token数
+const estimateTokenCount = (text) => {
+  if (!text) return 0
+  
+  let cjkCharCount = 0
+  let otherCharCount = 0
+  
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]
+    if (isCJKCharacter(char)) {
+      cjkCharCount++
+    } else {
+      otherCharCount++
+    }
+  }
+  
+  // 其他字符每4个算1个token
+  const otherTokens = Math.ceil(otherCharCount / 4)
+  return cjkCharCount + otherTokens
+}
+
+// 判断是否为中日韩字符
+const isCJKCharacter = (char) => {
+  const code = char.charCodeAt(0)
+  return (
+    (code >= 0x4E00 && code <= 0x9FFF) || // 中日韩统一表意文字
+    (code >= 0x3400 && code <= 0x4DBF) || // 扩展区 A
+    (code >= 0x3040 && code <= 0x30FF) || // 日文假名
+    (code >= 0xAC00 && code <= 0xD7AF)    // 韩文谚文
+  )
+}
+
+// 新建知识块
+const createChunk = async () => {
+  if (!createChunkForm.chunkText.trim()) {
+    showToast('知识块内容不能为空', 'error')
+    return
+  }
+  
+  // 验证Token数
+  const estimatedTokens = estimateTokenCount(createChunkForm.chunkText)
+  if (estimatedTokens > 512) {
+    showToast(`Token数超过限制，当前${estimatedTokens}，限制512`, 'error')
+    return
+  }
+  
+  try {
+    const response = await axios.put('/kb/doc/chunk/singleChunk', {
+      kbId: selectedKnowledgeBase.value.id.toString(),
+      docId: selectedDocument.value.id,
+      chunkText: createChunkForm.chunkText
+    })
+    
+    if (response.data.code === '0') {
+      showCreateChunkModal.value = false
+      showToast('创建成功', 'success')
+      loadChunks(selectedDocument.value.id)
+    } else {
+      showToast(response.data.message || '创建失败', 'error')
+    }
+  } catch (error) {
+    console.error('创建知识块失败:', error)
+    const errorMessage = error.response?.data?.message || error.message || '创建失败'
+    showToast(errorMessage, 'error')
+  } finally {
+    createChunkForm.chunkText = ''
+  }
+}
+
 // 切换知识块启用状态
 const toggleChunkEnabled = (chunk) => {
   // 实现启用/禁用功能
@@ -325,17 +426,27 @@ const toggleChunkEnabled = (chunk) => {
   chunk.enabled = chunk.enabled === 1 ? 0 : 1
 }
 
+// 知识块删除确认
+const showChunkDeleteConfirm = ref(false)
+const chunkToDeleteId = ref('')
+const chunkToDeleteContent = ref('')
+
 // 确认删除知识块
-const confirmDeleteChunk = async (id, content) => {
+const confirmDeleteChunk = (id, content) => {
+  chunkToDeleteId.value = id
+  chunkToDeleteContent.value = content
+  showChunkDeleteConfirm.value = true
+}
+
+// 处理知识块删除确认
+const handleChunkDeleteConfirm = async () => {
   try {
-    const response = await axios.delete(`/kb/doc/chunk/deleteChunk/${id}`)
+    const response = await axios.delete(`/kb/doc/chunk/deleteChunk/${chunkToDeleteId.value}`)
     
     if (response.data.code === '0') {
+      showChunkDeleteConfirm.value = false
       showToast('删除成功', 'success')
-      // 重新加载知识块列表
-      if (selectedDocument.value) {
-        loadChunks(selectedDocument.value.id)
-      }
+      loadChunks(selectedDocument.value.id)
     } else {
       showToast('删除失败', 'error')
     }
@@ -345,13 +456,11 @@ const confirmDeleteChunk = async (id, content) => {
   }
 }
 
-// 重置知识块筛选条件
-const resetChunkFilters = () => {
-  chunkStatusFilter.value = 'all'
-  chunkSearchQuery.value = ''
-  if (selectedDocument.value) {
-    loadChunks(selectedDocument.value.id)
-  }
+// 取消删除知识块
+const handleChunkDeleteCancel = () => {
+  showChunkDeleteConfirm.value = false
+  chunkToDeleteId.value = ''
+  chunkToDeleteContent.value = ''
 }
 
 // 防抖定时器
@@ -544,7 +653,8 @@ const startUpload = async () => {
   } catch (error) {
     console.error('上传文件失败:', error)
     uploading.value = false
-    showToast('上传失败，请稍后重试', 'error')
+    const errorMessage = error.response?.data?.message || error.message || '上传失败，请稍后重试'
+    showToast(errorMessage, 'error')
   }
 }
 
@@ -656,7 +766,8 @@ const handleDeleteConfirm = async () => {
     }
   } catch (error) {
     console.error('删除知识库失败:', error)
-    showToast('删除失败', 'error')
+    const errorMessage = error.response?.data?.message || error.message || '删除失败'
+    showToast(errorMessage, 'error')
   } finally {
     itemToDelete.value = null
   }
@@ -681,7 +792,7 @@ const handleCreate = async () => {
       showCreateModal.value = false
       // 重置表单
       createForm.kbName = ''
-      createForm.embeddingModel = 'qwen-embedding'
+      createForm.embeddingModel = 'text-embedding-v4'
       createForm.collection = ''
       fetchKnowledgeList()
     } else {
@@ -689,7 +800,8 @@ const handleCreate = async () => {
     }
   } catch (error) {
     console.error('创建知识库失败:', error)
-    showToast('创建失败', 'error')
+    const errorMessage = error.response?.data?.message || error.message || '创建失败'
+    showToast(errorMessage, 'error')
   }
 }
 
@@ -712,7 +824,8 @@ const handleUpdate = async () => {
     }
   } catch (error) {
     console.error('更新知识库失败:', error)
-    showToast('更新失败', 'error')
+    const errorMessage = error.response?.data?.message || error.message || '更新失败'
+    showToast(errorMessage, 'error')
   }
 }
 
@@ -818,22 +931,25 @@ const changeDocumentPage = (page) => {
 /* 状态指示器样式 */
 .status-indicator {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: 4px 12px;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 500;
+  vertical-align: middle;
 }
 
 .status-indicator.success {
-  background-color: #f6ffed;
-  color: #52c41a;
-  border: 1px solid #b7eb8f;
+  background-color: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #91d5ff;
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.1);
 }
 
 .status-indicator.warning {
-  background-color: #fffbe6;
-  color: #faad14;
-  border: 1px solid #ffe58f;
+  background-color: #fff7e6;
+  color: #fa8c16;
+  border: 1px solid #ffd591;
+  box-shadow: 0 2px 4px rgba(250, 140, 22, 0.1);
 }
 
 /* 表格操作按钮样式 */
@@ -1165,6 +1281,12 @@ const changeDocumentPage = (page) => {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   max-width: 100%;
+  min-height: 84px;
+  white-space: normal;
+  word-wrap: break-word;
+  background-color: #f5f7fa;
+  padding: 12px;
+  border-radius: 8px;
 }
 
 /* 状态节点样式 */
@@ -1307,7 +1429,11 @@ const changeDocumentPage = (page) => {
   text-align: center;
   padding: 60px 0;
   color: #999;
-  font-size: 14px;
+}
+
+.empty-icon {
+  margin-bottom: 16px;
+  color: #d9d9d9;
 }
 
 .pagination {
@@ -1344,6 +1470,23 @@ const changeDocumentPage = (page) => {
 .page-info {
   font-size: 14px;
   color: #666;
+}
+
+/* 页面标题样式 */
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+/* 知识块信息样式 */
+.kb-name-title,
+.kb-id-title {
+  font-size: 16px;
+  font-weight: 400;
+  color: #666;
+  margin-left: 8px;
 }
 </style>
 
@@ -1577,7 +1720,7 @@ const changeDocumentPage = (page) => {
                   </svg>
                   刷新
                 </button>
-                <button class="add-button" @click="showCreateModal = true">
+                <button class="add-button btn-hover-effect" @click="showCreateModal = true">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="12" y1="5" x2="12" y2="19"/>
                     <line x1="5" y1="12" x2="19" y2="12"/>
@@ -1705,7 +1848,7 @@ const changeDocumentPage = (page) => {
                     </svg>
                     返回知识库
                   </button>
-                  <button class="upload-button" @click="showUploadModal = true">
+                  <button class="upload-button btn-hover-effect" @click="showUploadModal = true">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                       <polyline points="7 10 12 15 17 10"/>
@@ -1826,13 +1969,13 @@ const changeDocumentPage = (page) => {
                 </h1>
               </div>
               <div class="header-right">
-                <button class="btn-back" @click="activeTab = 'documents'">
+                <button class="btn-back btn-hover-effect" @click="activeTab = 'documents'">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M19 12H5M12 19l-7-7 7-7"/>
                   </svg>
                   返回文档
                 </button>
-                <button class="btn-rebuild">
+                <button class="btn-rebuild btn-hover-effect">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 12c0-4.97-4.03-9-9-9s-9 4.03-9 9 4.03 9 9 9"/>
                     <path d="M15 12l-3-3-3 3"/>
@@ -1840,7 +1983,7 @@ const changeDocumentPage = (page) => {
                   </svg>
                   重建分块
                 </button>
-                <button class="add-button">
+                <button class="add-button btn-hover-effect" @click="openCreateChunkModal">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="12" y1="5" x2="12" y2="19"/>
                     <line x1="5" y1="12" x2="19" y2="12"/>
@@ -1869,7 +2012,7 @@ const changeDocumentPage = (page) => {
                   </button>
                 </div>
                 <div class="filter-box">
-                  <select v-model="chunkStatusFilter" class="status-select" @change="loadChunks(selectedDocument.id)">
+                  <select v-model="chunkStatusFilter" class="status-select">
                     <option value="all">全部状态</option>
                     <option value="enabled">启用</option>
                     <option value="disabled">禁用</option>
@@ -1889,83 +2032,60 @@ const changeDocumentPage = (page) => {
 
               <!-- 知识块列表 -->
               <div class="chunk-list">
-                <table class="chunk-table">
-                  <thead>
-                    <tr>
-                      <th><input type="checkbox" v-model="selectAll" @change="handleSelectAll" /></th>
-                      <th>序号</th>
-                      <th>内容</th>
-                      <th>状态</th>
-                      <th>字符数</th>
-                      <th>Token数</th>
-                      <th>更新时间</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(row, index) in chunks" :key="row.id">
-                      <td><input type="checkbox" :checked="selectedChunks.includes(row.id)" @change="handleSelectChunk(row.id)" /></td>
-                      <td>{{ (chunkPagination.current - 1) * chunkPagination.size + index + 1 }}</td>
-                      <td class="content-cell">
-                        <div class="content-display">
-                          {{ row.chunkText || '' }}
-                        </div>
-                      </td>
-                      <td>
-                        <span class="status-node {{ row.enabled === 1 ? 'status-enabled' : 'status-disabled' }}">
-                          {{ row.enabled === 1 ? '启用' : '禁用' }}
-                        </span>
-                      </td>
-                      <td>{{ row.charCount || 0 }}</td>
-                      <td>{{ row.tokenCount || 0 }}</td>
-                      <td>{{ formatDate(row.updateTime) }}</td>
-                      <td class="action-cell">
-                        <div class="table-actions">
-                          <BaseButton type="primary" size="small" @click="editChunk(row)">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                            </svg>
-                          </BaseButton>
-                          <BaseButton type="danger" size="small" @click="confirmDeleteChunk(row.id, row.chunkText)">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                              <polyline points="3 6 5 6 21 6"/>
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                              <line x1="10" y1="11" x2="10" y2="17"/>
-                              <line x1="14" y1="11" x2="14" y2="17"/>
-                            </svg>
-                          </BaseButton>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr v-if="chunks.length === 0">
-                      <td colspan="8" class="empty-state">
-                        暂无数据
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                <!-- 分页 -->
-                <div class="pagination">
-                  <button 
-                    class="page-btn" 
-                    :disabled="chunkPagination.current === 1" 
-                    @click="changeChunkPage(chunkPagination.current - 1)"
-                  >
-                    上一页
-                  </button>
-                  <span class="page-info">
-                    {{ chunkPagination.current }} / {{ Math.ceil(chunkPagination.total / chunkPagination.size) }}
-                  </span>
-                  <button 
-                    class="page-btn" 
-                    :disabled="chunkPagination.current === Math.ceil(chunkPagination.total / chunkPagination.size)" 
-                    @click="changeChunkPage(chunkPagination.current + 1)"
-                  >
-                    下一页
-                  </button>
-                </div>
+                <BaseTable 
+                  :columns="chunkColumns" 
+                  :data="chunks" 
+                  :total="chunkPagination.total"
+                  :currentPage="chunkPagination.current"
+                  :pageSize="chunkPagination.size"
+                  @page-change="changeChunkPage"
+                  @page-size-change="handleChunkPageSizeChange"
+                >
+                  <template #index="{ row, index }">
+                    <div class="checkbox-cell">
+                      <input type="checkbox" :checked="selectedChunks.includes(row.id)" @change="handleSelectChunk(row.id)" />
+                    </div>
+                  </template>
+                  <template #content="{ row }">
+                    <div class="content-cell">
+                      <div class="content-display">
+                        {{ row.chunkText || '' }}
+                      </div>
+                    </div>
+                  </template>
+                  <template #status="{ row }">
+                    <span class="status-node {{ row.enabled === 1 ? 'status-enabled' : 'status-disabled' }}">
+                      {{ row.enabled === 1 ? '启用' : '禁用' }}
+                    </span>
+                  </template>
+                  <template #charCount="{ row }">
+                    {{ row.charCount || 0 }}
+                  </template>
+                  <template #tokenCount="{ row }">
+                    {{ row.tokenCount || 0 }}
+                  </template>
+                  <template #updateTime="{ row }">
+                    {{ formatDate(row.updateTime) }}
+                  </template>
+                  <template #action="{ row }">
+                    <div class="table-actions">
+                      <BaseButton type="primary" size="small" @click="editChunk(row)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                      </BaseButton>
+                      <BaseButton type="danger" size="small" @click="confirmDeleteChunk(row.id, row.chunkText)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                          <line x1="10" y1="11" x2="10" y2="17"/>
+                          <line x1="14" y1="11" x2="14" y2="17"/>
+                        </svg>
+                      </BaseButton>
+                    </div>
+                  </template>
+                </BaseTable>
               </div>
             </div>
           </div>
@@ -2004,9 +2124,7 @@ const changeDocumentPage = (page) => {
           <div class="form-group">
             <label>Embedding模型 <span class="required">*</span></label>
             <select v-model="createForm.embeddingModel">
-              <option value="qwen-embedding">qwen-embedding</option>
-              <option value="text-embedding-ada-002">text-embedding-ada-002</option>
-              <option value="bge-large-zh">bge-large-zh</option>
+              <option value="text-embedding-v4">text-embedding-v4</option>
             </select>
           </div>
           <div class="form-group">
@@ -2285,6 +2403,71 @@ const changeDocumentPage = (page) => {
         </div>
       </div>
     </div>
+
+    <!-- 新建知识块弹窗 -->
+    <div v-if="showCreateChunkModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>新建知识块</h3>
+          <button class="close-button" @click="handleCreateChunkModalClose">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>知识块内容 <span class="required">*</span></label>
+            <textarea 
+              v-model="createChunkForm.chunkText" 
+              class="form-textarea"
+              placeholder="请输入知识块内容"
+              rows="10"
+              maxlength="2048"
+              @input="updateCharCount"
+            ></textarea>
+            <div class="char-count">
+              字符数: {{ charCount }} | Token数: {{ tokenCount }} | 限制: 512 Token
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-button" @click="handleCreateChunkModalClose">取消</button>
+          <button class="confirm-button" @click="createChunk">创建</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 知识块删除确认弹窗 -->
+    <div v-if="showChunkDeleteConfirm" class="modal-overlay" @click.self="handleChunkDeleteCancel">
+      <div class="modal-content delete-modal">
+        <div class="modal-header">
+          <h3>确认删除</h3>
+          <button class="close-button" @click="handleChunkDeleteCancel">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="delete-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ff4d4f" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+          </div>
+          <p class="delete-message">确定要删除知识块吗？</p>
+          <p class="delete-hint">此操作不可撤销，删除后相关数据将被永久清除。</p>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-button" @click="handleChunkDeleteCancel">取消</button>
+          <button class="delete-confirm-button" @click="handleChunkDeleteConfirm">删除</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -2518,6 +2701,27 @@ const changeDocumentPage = (page) => {
   color: #667eea;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+/* 通用按钮悬停效果 */
+.btn-hover-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-hover-effect::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(102, 126, 234, 0.1), transparent);
+  transition: left 0.5s ease;
+}
+
+.btn-hover-effect:hover::before {
+  left: 100%;
 }
 
 .back-button::before {
@@ -3825,7 +4029,7 @@ const changeDocumentPage = (page) => {
 
 /* 文档页面头部 */
 .document-management .page-header,
-.page-header {
+.chunk-management .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -3835,7 +4039,7 @@ const changeDocumentPage = (page) => {
 }
 
 .document-management .header-left h1,
-.header-left h1 {
+.chunk-management .header-left h1 {
   font-size: 24px;
   font-weight: 600;
   color: #333;
@@ -3846,8 +4050,8 @@ const changeDocumentPage = (page) => {
 }
 
 .document-management .kb-name-title,
-.kb-name-title,
-.kb-id-title {
+.chunk-management .kb-name-title,
+.chunk-management .kb-id-title {
   font-size: 16px;
   font-weight: 500;
   color: #666;
@@ -4103,8 +4307,9 @@ const changeDocumentPage = (page) => {
 .switch {
   position: relative;
   display: inline-block;
-  width: 40px;
-  height: 20px;
+  width: 48px;
+  height: 24px;
+  vertical-align: middle;
 }
 
 .switch input {
@@ -4120,33 +4325,37 @@ const changeDocumentPage = (page) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #ccc;
+  background-color: #f0f0f0;
   transition: .4s;
-  border-radius: 20px;
+  border-radius: 24px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .slider:before {
   position: absolute;
   content: "";
-  height: 16px;
-  width: 16px;
+  height: 20px;
+  width: 20px;
   left: 2px;
   bottom: 2px;
   background-color: white;
   transition: .4s;
   border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 input:checked + .slider {
   background-color: #667eea;
+  box-shadow: inset 0 2px 4px rgba(102, 126, 234, 0.3);
 }
 
 input:focus + .slider {
-  box-shadow: 0 0 1px #667eea;
+  box-shadow: 0 0 2px #667eea, inset 0 2px 4px rgba(102, 126, 234, 0.3);
 }
 
 input:checked + .slider:before {
-  transform: translateX(20px);
+  transform: translateX(24px);
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
 }
 
 .file-type-tag {
@@ -4378,6 +4587,17 @@ input:checked + .slider:before {
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
   background-color: white;
+}
+
+.char-count {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #666;
+  text-align: right;
+}
+
+.char-count.exceeded {
+  color: #ff4d4f;
 }
 
 .edit-chunk-modal {

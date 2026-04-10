@@ -1,6 +1,10 @@
 <template>
   <div class="base-form">
     <form @submit.prevent="handleSubmit" class="form">
+      <div class="form-header" v-if="title">
+        <h3 class="form-title">{{ title }}</h3>
+        <div class="form-subtitle" v-if="subtitle">{{ subtitle }}</div>
+      </div>
       <div class="form-content">
         <slot></slot>
       </div>
@@ -52,6 +56,14 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  title: {
+    type: String,
+    default: ''
+  },
+  subtitle: {
+    type: String,
+    default: ''
   }
 })
 
@@ -124,46 +136,64 @@ defineExpose({
 <style scoped>
 .base-form {
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  border: 1px solid #f0f0f0;
 }
 
 .form {
   width: 100%;
 }
 
-.form-content {
-  margin-bottom: 24px;
+.form-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 32px 32px 24px;
+  color: white;
 }
 
-.form-content :deep(.form-field:first-child) .field-label {
-  font-weight: 600;
-  color: #1a1a1a;
-  padding-bottom: 8px;
-  border-bottom: 2px solid #667eea;
-  margin-bottom: 16px;
+.form-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+}
+
+.form-subtitle {
+  font-size: 14px;
+  opacity: 0.9;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.form-content {
+  padding: 32px;
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid #e8e8e8;
+  gap: 16px;
+  padding: 24px 32px;
+  border-top: 1px solid #f0f0f0;
+  background: #fafafa;
+  border-radius: 0 0 12px 12px;
 }
 
 .form-button {
-  padding: 8px 20px;
-  border-radius: 4px;
+  padding: 12px 24px;
+  border-radius: 8px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
   border: 1px solid transparent;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: 100px;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .form-button.primary {
@@ -173,22 +203,28 @@ defineExpose({
 
 .form-button.primary:hover {
   background: #5a6fd8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
 .form-button.primary:disabled {
   background: #c7d2fe;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .form-button.secondary {
   background: #fff;
   color: #666;
-  border-color: #d9d9d9;
+  border-color: #e0e0e0;
 }
 
 .form-button.secondary:hover {
   border-color: #667eea;
   color: #667eea;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
 }
 
 .loading-spinner {
@@ -203,5 +239,29 @@ defineExpose({
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .form-header {
+    padding: 24px 24px 16px;
+  }
+  
+  .form-title {
+    font-size: 20px;
+  }
+  
+  .form-content {
+    padding: 24px;
+  }
+  
+  .form-actions {
+    padding: 20px 24px;
+    flex-direction: column;
+  }
+  
+  .form-button {
+    width: 100%;
+  }
 }
 </style>
