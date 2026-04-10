@@ -30,6 +30,11 @@ public class KnowledgeChunkPO {
     private Long docId;
 
     /**
+     * 对应MilvusId
+     */
+    private Long milvusId;
+
+    /**
      * 分块序号
      */
     private Integer chunkIndex;
