@@ -3,21 +3,26 @@ package com.azheng.boot.kb.service.Impl;
 import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.StrUtil;
 import com.azheng.boot.kb.dao.mapper.KnowledgeBaseMapper;
+import com.azheng.boot.kb.dao.mapper.KnowledgeChunkMapper;
+import com.azheng.boot.kb.dao.mapper.KnowledgeDocumentMapper;
 import com.azheng.boot.kb.dao.po.KnowledgeBasePO;
 import com.azheng.boot.kb.controller.request.CreateKbRequest;
 import com.azheng.boot.kb.controller.request.KnowledgeBasePageRequest;
 import com.azheng.boot.kb.controller.request.ReNameKbRequest;
 import com.azheng.boot.kb.service.KnowledgeBaseService;
 import com.azheng.boot.kb.controller.vo.KnowledgeBaseVO;
+import com.azheng.boot.rag.embedding.milvus.operation.MilvusOperations;
 import com.azheng.framework.context.UserContext;
 import com.azheng.framework.exception.ClientException;
 import com.azheng.framework.exception.ServiceException;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.annotation.Resource;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import static cn.dev33.satoken.SaManager.log;
@@ -28,10 +33,21 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Resource
     private KnowledgeBaseMapper knowledgeBaseMapper;
 
+    @Resource
+    private KnowledgeDocumentMapper knowledgeDocumentMapper;
+
+    @Resource
+    private KnowledgeChunkMapper knowledgeChunkMapper;
+
+    @Resource
+    private MilvusOperations milvusOperations;
+
     /**
      * 创建知识库
+     * 目前配置的embeddingModel，是用于所属知识块向量化时做模型匹配的
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean create(CreateKbRequest request) {
         Assert.notNull(request,()-> new ClientException("知识库创建请求不能为空"));
         String kbName = StrUtil.trimToNull(request.getKbName());
@@ -48,8 +64,12 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 .createBy(UserContext.getUsername())
                 .build();
         try {
+            //存入MySQL
             int i = knowledgeBaseMapper.insert(knowledgeBasePO);
-            if(i<=0){
+
+            //创建Collection
+            boolean loaded = milvusOperations.createChunkCollection(request.getCollection());
+            if(i<=0 || !loaded){
                 return false;
             }
         } catch (Exception e) {
@@ -60,12 +80,29 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     /**
      * 删除知识库
+     * 暂时逻辑删除，后续做定时归档+清理
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void delete(String kbID) {
-        //TODO 文档部分做好之后，删除之前要确保改知识库下无附属文档
+        Long kbId = Long.parseLong(kbID);
 
-        knowledgeBaseMapper.deleteById(Long.parseLong(kbID));
+        // 1.删除MySQL记录
+        knowledgeBaseMapper.update(Wrappers
+                                    .<KnowledgeBasePO>lambdaUpdate()
+                                    .eq(KnowledgeBasePO::getId, kbId)
+                                    .set(KnowledgeBasePO::getDelFlag,1)
+        );
+
+        UpdateWrapper updateWrapper = new UpdateWrapper();
+        updateWrapper.eq("kb_id",kbId);
+        updateWrapper.set("del_flag",1);
+        // 2.删除所属文档
+        knowledgeDocumentMapper.update(updateWrapper);
+        // 3.删除所属知识块
+        knowledgeChunkMapper.update(updateWrapper);
+
+        // 4.删除所属MilvusCollection
     }
 
     /**
