@@ -14,9 +14,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class ChatController {
 
     @Resource
-    private StreamingChatModel streamingChatModel;
-
-    @Resource
     private ChatService chatService;
 
     @GetMapping("/ceshi/streamingChat")

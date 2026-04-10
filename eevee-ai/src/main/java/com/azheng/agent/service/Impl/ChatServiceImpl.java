@@ -16,7 +16,7 @@ public class ChatServiceImpl implements ChatService {
     /**
      * 引入系统默认聊天模型
      */
-    @Resource
+    @Resource(name = "qwen-flash")
     private StreamingChatModel streamingChatModel;
 
     @Override
