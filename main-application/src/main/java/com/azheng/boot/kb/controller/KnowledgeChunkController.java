@@ -1,9 +1,6 @@
 package com.azheng.boot.kb.controller;
 
-import com.azheng.boot.kb.controller.request.MkdirChunkTextRequest;
-import com.azheng.boot.kb.controller.request.PageQueryChunkRequest;
-import com.azheng.boot.kb.controller.request.PageQueryDocByKbIdRequest;
-import com.azheng.boot.kb.controller.request.StartChunkRequest;
+import com.azheng.boot.kb.controller.request.*;
 import com.azheng.boot.kb.controller.vo.KnowledgeChunkVO;
 import com.azheng.boot.kb.controller.vo.KnowledgeDocumentVO;
 import com.azheng.boot.kb.service.KnowledgeChunkService;
@@ -35,6 +32,11 @@ public class KnowledgeChunkController {
         }
     }
 
+    /**
+     * 编辑知识块
+     * @param request
+     * @return
+     */
     @PutMapping("/mkdirText")
     public Result<Void> updateText(@RequestBody MkdirChunkTextRequest request){
         try {
@@ -46,10 +48,23 @@ public class KnowledgeChunkController {
     }
 
     /**
+     * 新增单条知识块
+     */
+    @PutMapping("/singleChunk")
+    public Result<Void> createChunk(@RequestBody InsertChunkRequest request) {
+        try {
+            knowledgeChunkService.insertChunk(request);
+            return Results.success();
+        } catch (Exception e) {
+            throw new ServiceException("新增知识块失败");
+        }
+    }
+
+    /**
      * 根据Id删除分块
      */
     @DeleteMapping("/deleteChunk/{id}")
-    public Result<Void> deleteDoc(@PathVariable("id") String chunkId){
+    public Result<Void> deleteChunk(@PathVariable("id") String chunkId){
         knowledgeChunkService.remove(chunkId);
         return Results.success();
     }

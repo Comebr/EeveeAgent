@@ -1,5 +1,6 @@
 package com.azheng.boot.kb.service;
 
+import com.azheng.boot.kb.controller.request.InsertChunkRequest;
 import com.azheng.boot.kb.controller.request.MkdirChunkTextRequest;
 import com.azheng.boot.kb.controller.request.PageQueryChunkRequest;
 import com.azheng.boot.kb.controller.request.StartChunkRequest;
@@ -28,4 +29,9 @@ public interface KnowledgeChunkService {
      * @param chunkId
      */
     void remove(String chunkId);
+
+    /**
+     * 新增单条知识块
+     */
+    void insertChunk(InsertChunkRequest request);
 }
