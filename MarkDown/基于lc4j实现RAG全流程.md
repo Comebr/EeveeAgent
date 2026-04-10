@@ -103,3 +103,75 @@ private final Metadata metadata;
 
 
 ### 文本向量化存储
+
+引入LangChain4j-Milvus集成
+
+
+
+```xml
+<dependency>
+    <groupId>dev.langchain4j</groupId>
+    <artifactId>langchain4j-milvus</artifactId>
+    <version>1.12.2-beta22</version>
+</dependency>
+```
+
+
+
+
+
+**lc4j-Milvus客户端配置**
+
+注意：一定要提前创建好collection，若无指定名称的collection，连接时会报错
+
+```java
+import dev.langchain4j.store.embedding.milvus.MilvusEmbeddingStore;
+import io.milvus.common.clientenum.ConsistencyLevelEnum;
+import io.milvus.param.IndexType;
+import io.milvus.param.MetricType;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class MilvusServiceClient {
+
+
+    @Bean
+    public MilvusEmbeddingStore createClient(){
+        return MilvusEmbeddingStore
+                .builder()
+                .host("192.168.191.128")
+                .port(19530)
+                .collectionName("milvus-embedding-EeveeAgent") //相当于数据库名称
+                .dimension(4096) //向量维度，与EmbeddingModel保持一致
+                .indexType(IndexType.IVF_FLAT) // 索引类型：小数据量用 FLAT，大数据量用 IVF_FLAT/HNSW
+                .metricType(MetricType.COSINE) // 相似度度量：文本检索推荐用 COSINE
+                .consistencyLevel(ConsistencyLevelEnum.EVENTUALLY) // 一致性级别：最终一致性性能最好
+                .autoFlushOnInsert(true)      // 插入后自动刷盘（开发环境开，生产环境可关）
+                .build();
+    }
+}
+```
+
+
+
+
+
+**MilvusEmbeddingStore**解析
+
+> 它是 `langchain4j-milvus` 依赖中唯一的公共类，**严格实现了 LangChain4j 定义的 `EmbeddingStore<TextSegment>` 接口**，仅此而已。它的存在只有一个目的：**让LangChain4j 的 RAG 组件（如 `EmbeddingStoreContentRetriever`）无需关心底层向量数据库的差异，用统一的 API 操作向量**。
+
+
+
+1. **自动创建连接**：根据你传入的 host/port 或已有 `MilvusServiceClient` 建立连接
+2. **自动创建集合**：如果指定的集合不存在，会根据你配置的 Schema 自动创建
+3. **向量插入**：将 `(向量 + TextSegment)` 批量或单条插入 Milvus
+4. **向量相似度检索**：根据输入向量返回最相似的 TopK 个 `TextSegment`
+5. **简单删除**：根据 ID 删除单条或多条向量（LangChain4j 0.34.0+ 才支持）
+
+
+
+- **所以一个成熟的项目就必须单独配置官方的 `MilvusServiceClient`**
+
+
+
