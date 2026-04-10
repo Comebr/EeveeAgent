@@ -50,10 +50,17 @@ langchain4j:
   community:
   # --OpenAI
   open-ai:
+    api-key: ${BAILIAN_API_KEY}
+    base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    dimensions: 2048
 
 #---Milvus 向量数据库配置---
 milvus:
   uri: http://192.168.191.128:19530
+  dbname: eevee_agent
+  connectTimeout: 5000
+  keepAliveTime: 30000
+  idleTimeout: 60000
 
 
 #---RustFS 对象存储配置---
@@ -67,7 +74,7 @@ rustfs:
 rag:
   default:
     collection-name: rag_default_store   # Milvus 集合名（知识库表）
-    dimension: 4096                     # 向量维度 → 必须和 embedding 模型一致
+    dimension: 2048                     # 向量维度 → 必须和 embedding 模型一致
     metric-type: COSINE                 # 相似度算法（余弦相似度，正确）
 
 
