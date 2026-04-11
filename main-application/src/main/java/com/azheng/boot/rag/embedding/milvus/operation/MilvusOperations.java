@@ -20,6 +20,7 @@ import io.milvus.v2.service.collection.request.GetLoadStateReq;
 import io.milvus.v2.service.database.request.CreateDatabaseReq;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.InsertReq;
+import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.request.UpsertReq;
 import io.milvus.v2.service.vector.response.DeleteResp;
 import jakarta.annotation.Resource;
@@ -38,7 +39,7 @@ import java.util.List;
 @Component
 public class MilvusOperations {
 
-    @Value(value = "${langchain4j.open-ai.dimensions}")
+    @Value(value = "${langchain4j.community.dashscope.dimensions}")
     private Integer dimension;
 
     @Resource

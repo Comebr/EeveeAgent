@@ -1,28 +1,32 @@
 package com.azheng.agent.config;
 
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
+
 @Configuration
 public class LLMConfig {
 
-    @Value(value = "${langchain4j.open-ai.base-url}")
+    @Value(value = "${langchain4j.community.dashscope.base-url}")
     private String baseUrl;
 
-    @Value(value = "${langchain4j.open-ai.api-key}")
+    @Value(value = "${langchain4j.community.dashscope.api-key}")
     private String apiKey;
 
-    @Value(value = "${langchain4j.open-ai.embedding-model.dimensions}")
+    @Value(value = "${langchain4j.community.dashscope.dimensions}")
     private Integer dimensions;
 
     /**
      * 流式输出模型-百炼
-     * 该模型最大向量维度为 3072
+     * 职责：前端会话输出
      */
     @Bean(name = "qwen-flash")
     public StreamingChatModel QwenFlashStreamingChatModel(){
@@ -34,12 +38,32 @@ public class LLMConfig {
                 .build();
     }
 
+    /**
+     * 职责：后台脏活累活
+     */
+    @Bean(name = "qwen-turbo")
+    public ChatModel retrievalToolModel(){
+        return OpenAiChatModel
+                .builder()
+                .apiKey(apiKey)
+                .baseUrl(baseUrl)
+                .modelName("qwen-turbo")
+                .temperature(0.1)
+                .topP(0.1)
+                .maxTokens(150)
+                .frequencyPenalty(0.2)   // 降低重复词频率
+                .presencePenalty(0.2)    // 避免重复生成相同内容
+                .timeout(Duration.ofSeconds(3))
+                .build();
+    }
+
 
 
 
 
     /**
      * 向量模型-百炼
+     * 该模型最大向量维度为 3072
      */
     @Bean(name = "embedding-v4")
     public EmbeddingModel defaultEmbeddingModel(){
