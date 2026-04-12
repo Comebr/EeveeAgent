@@ -503,7 +503,8 @@ lc4j提供了5个核心组件：
 
 
 
-有的同学看到这，会很悲观，langchain4j缺点这么多，还有必要学吗QAQ？答案是：一定要学，不仅要学langchain4j，还要学SpringAI、SAA...不管任何技术都有一定的缺陷，没有完美的技术，只有懒惰的人。langchain4j的弱势项可以用其他框架的优点去弥补。凡事都要循序渐进，没有谁一出生就是架构师，通过各类框架的学习增长自身的工程能力、架构能力。
+> 有的同学看到这，会很悲观，langchain4j缺点这么多，还有必要学吗QAQ？答案是：一定要学，不仅要学langchain4j，还要学SpringAI、SAA...不管任何技术都有一定的缺陷，没有完美的技术，只有懒惰的人。langchain4j的弱势项可以用其他框架的优点去弥补。凡事都要循序渐进，没有谁一出生就是架构师，通过各类框架的学习增长自身的工程能力、架构能力。
+>
 
 
 
@@ -518,3 +519,191 @@ lc4j提供了5个核心组件：
 
 
 ## 意图管理
+
+#### 1.数据表设计
+
+核心：子点标识、所属父节点标识、结点类型、collection_name、top_k
+
+```sql
+CREATE TABLE `intent_node` (
+  `id` bigint NOT NULL COMMENT '节点自增主键',
+  `kb_id` bigint DEFAULT NULL COMMENT '关联知识库id',
+  `intent_code` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '意图节点唯一标识',
+  `name` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '节点名称',
+  `level` tinyint NOT NULL COMMENT '层级{0：DOMAIN 1：CATEGORY 2：INTENT}\r\n 注意：层级不建议过多\r\n 领域——》分类/场景——》意图',
+  `parent_code` varchar(65) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '父节点唯一标识，默认null：ROOT',
+  `description` varchar(512) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '节点描述',
+  `examples` text COLLATE utf8mb4_unicode_ci COMMENT '示例问题',
+  `kind` tinyint(1) NOT NULL COMMENT '类型：0：RAG知识库类 1：System系统交互类',
+  `collection_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '关联的Collection表名称',
+  `top_k` int DEFAULT NULL COMMENT '知识库检索粗筛TopK，null：全局统一TopK',
+  `prompt_snippet` text COLLATE utf8mb4_unicode_ci COMMENT '提示词片段',
+  `prompt_template` text COLLATE utf8mb4_unicode_ci COMMENT '提示词模版',
+  `sort_order` int NOT NULL DEFAULT '0' COMMENT '排序字段',
+  `enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用 1：启用 0：禁用',
+  `create_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '创建人',
+  `update_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '修改人',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+  `del_flag` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否删除 0：正常 1：删除',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='RAG意图树节点配置表';
+```
+
+
+
+
+
+#### 2.枚举类设计
+
+可扩展，意图层级不建议超过3层
+
+IntentLevel.java ：意图层级枚举
+
+```java
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.azheng.boot.intention.enums;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+/**
+ * 意图层级枚举
+ * 用于表示知识库中意图的层级
+ */
+@Getter
+@RequiredArgsConstructor
+public enum IntentLevel {
+
+    /**
+     * 顶层：集团信息化 / 业务系统 / 中间件环境
+     */
+    DOMAIN(0),
+
+    /**
+     * 第二层：人事 / 行政 / OA系统 / Redis ...
+     */
+    CATEGORY(1),
+
+    /**
+     * 第三层：更具体的 INTENT，如 系统介绍 / 数据安全 / 架构设计
+     */
+    INTENT(2);
+
+    private final int code;
+
+    /**
+     * 根据编码获取对应的意图层级
+     *
+     * @param code 层级编码
+     * @return 对应的IntentLevel枚举值，如果code为null或不存在则返回null
+     */
+    public static IntentLevel fromCode(Integer code) {
+        if (code == null) {
+            return null;
+        }
+        for (IntentLevel e : values()) {
+            if (e.code == code) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 返回枚举的名称
+     *
+     * @return 枚举名称字符
+     */
+    @Override
+    public String toString() {
+        return name();
+    }
+}
+
+
+
+```
+
+IntentKind.java ：意图类型枚举
+
+```java
+package com.azheng.boot.intention.enums;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+/**
+ * 意图类型枚举
+ * 用于区分用户意图的不同类型
+ */
+@Getter
+@RequiredArgsConstructor
+public enum IntentKind {
+
+    /**
+     * 知识库类，走 RAG
+     */
+    KB(0),
+
+    /**
+     * 系统交互类，比如欢迎语、介绍自己
+     */
+    SYSTEM(1);
+
+
+    /**
+     * 意图类型编码
+     */
+    private final int code;
+
+    /**
+     * 根据编码获取对应的意图类型
+     *
+     * @param code 意图类型编码
+     * @return 对应的意图类型枚举值，如果编码不存在则返回null
+     */
+    public static IntentKind fromCode(Integer code) {
+        if (code == null) {
+            return null;
+        }
+        for (IntentKind e : values()) {
+            if (e.code == code) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 返回枚举名称
+     *
+     * @return 枚举的名称字符串
+     */
+    @Override
+    public String toString() {
+        return name();
+    }
+}
+
+
+```
+
+#### 3.数据模型类
+

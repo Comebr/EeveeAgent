@@ -36,6 +36,12 @@ spring:
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+  data:
+    redis:
+      host: 192.168.191.128
+      port: 6379
+      password: 123456
+
 #---Mybatis-Plus配置---
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
@@ -77,6 +83,12 @@ rag:
     collection-name: rag_default_store   # Milvus 集合名（知识库表）
     dimension: 2048                     # 向量维度 → 必须和 embedding 模型一致
     metric-type: COSINE                 # 相似度算法（余弦相似度，正确）
+
+
+intent:
+  topk: 30
+
+
 
 
 
