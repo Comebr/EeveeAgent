@@ -3,6 +3,7 @@ package com.azheng.boot.rag.config;
 import cn.dev33.satoken.filter.SaFilterAuthStrategy;
 import com.azheng.boot.rag.memory.RedisChatMemoryStore;
 import com.azheng.boot.rag.service.RAGChatService;
+import dev.langchain4j.community.model.dashscope.QwenTokenCountEstimator;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.memory.chat.TokenWindowChatMemory;
 import dev.langchain4j.model.TokenCountEstimator;
@@ -94,19 +95,16 @@ public class LLMConfig {
                 .build();
     }
 
-    @Bean(name = "streamingChat")
-    public RAGChatService ragChatService(StreamingChatModel qwenFlashStreamingChatModel){
-        TokenCountEstimator tokenCountEstimator = new OpenAiTokenCountEstimator("qwen-flash");
 
-        ChatMemoryProvider chatMemoryProvider = memoryId -> TokenWindowChatMemory
+    @Bean
+    public ChatMemoryProvider chatMemoryProvider(){
+        // 使用 gpt-3.5-turbo 作为模型名称来估算 token 数量，因为 qwen-flash 使用类似的 token 编码
+        TokenCountEstimator tokenCountEstimator = new OpenAiTokenCountEstimator("gpt-3.5-turbo");
+        return memoryId -> TokenWindowChatMemory
                 .builder()
                 .id(memoryId)
                 .maxTokens(1000,tokenCountEstimator)
                 .chatMemoryStore(redisChatMemoryStore)
-                .build();
-        return AiServices.builder(RAGChatService.class)
-                .streamingChatModel(qwenFlashStreamingChatModel)
-                .chatMemoryProvider(chatMemoryProvider)
                 .build();
     }
 }

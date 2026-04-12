@@ -32,6 +32,10 @@ const messages = ref([])
 const inputText = ref('')
 const isLoading = ref(false)
 const chatContentRef = ref(null)
+const autoScroll = ref(true) // 自动滚动标志
+const isStreaming = ref(false) // 是否正在流式输出
+const eventSource = ref(null) // 存储EventSource实例，用于暂停流式输出
+const showScrollButton = ref(false) // 是否显示回到底部的按钮
 
 // 实时获取用户信息
 const fetchUserInfo = async () => {
@@ -55,8 +59,20 @@ const fetchUserInfo = async () => {
 // 滚动到聊天底部
 const scrollToBottom = async () => {
   await nextTick()
-  if (chatContentRef.value) {
+  if (chatContentRef.value && autoScroll.value) {
     chatContentRef.value.scrollTop = chatContentRef.value.scrollHeight
+  }
+}
+
+// 处理滚动事件，当用户手动滚动时，禁用自动滚动
+const handleScroll = () => {
+  if (chatContentRef.value) {
+    const { scrollTop, scrollHeight, clientHeight } = chatContentRef.value
+    // 当滚动位置离底部超过10px时，认为用户在查看历史内容，禁用自动滚动
+    // 减小阈值，使autoScroll更快地被禁用，减少抖动
+    autoScroll.value = scrollHeight - scrollTop - clientHeight < 10
+    // 当不在底部时显示回到底部的按钮
+    showScrollButton.value = scrollHeight - scrollTop - clientHeight >= 10
   }
 }
 
@@ -92,9 +108,12 @@ const sendMessage = async () => {
   
   try {
     const token = localStorage.getItem('token')
-    const url = `/agent/ceshi/streamingChat?prompt=${encodeURIComponent(userMessage.content)}`
     
-    const eventSource = new EventSource(url)
+    // 由于 SSE 只支持 GET 请求，我们需要将参数作为查询参数传递
+    const url = `/agent/rag/streamingChat?prompt=${encodeURIComponent(userMessage.content)}`
+    
+    eventSource.value = new EventSource(url)
+    isStreaming.value = true
     
     let buffer = ''
     let displayContent = ''
@@ -137,7 +156,7 @@ const sendMessage = async () => {
         window.__chatTimers.push(outputTimer)
       }
     
-    eventSource.onmessage = (event) => {
+    eventSource.value.onmessage = (event) => {
         if (!firstDataReceived) {
           firstDataReceived = true
           const msgIndex = messages.value.findIndex(msg => msg.id === aiThinkingMessage.id)
@@ -155,10 +174,11 @@ const sendMessage = async () => {
         buffer += event.data
       }
       
-      eventSource.onerror = (error) => {
+      eventSource.value.onerror = (error) => {
         console.error('SSE连接错误:', error)
-        eventSource.close()
+        eventSource.value.close()
         isComplete = true
+        isStreaming.value = false
         // 等待缓冲区数据处理完成后再清理定时器和标记结束
         const checkBuffer = () => {
           if (buffer.length === 0) {
@@ -195,9 +215,10 @@ const sendMessage = async () => {
         }
       }
       
-      eventSource.addEventListener('close', () => {
-        eventSource.close()
+      eventSource.value.addEventListener('close', () => {
+        eventSource.value.close()
         isComplete = true
+        isStreaming.value = false
         // 等待缓冲区数据处理完成后再标记流式传输结束
         const checkBuffer = () => {
           if (buffer.length === 0) {
@@ -257,7 +278,9 @@ const regenerateResponse = async (message) => {
     // 直接发送请求，不添加新消息
     try {
       const token = localStorage.getItem('token')
-      const url = `/agent/ceshi/streamingChat?prompt=${encodeURIComponent(lastUserMessage.content)}`
+      
+      // 由于 SSE 只支持 GET 请求，我们需要将参数作为查询参数传递
+      const url = `/agent/rag/streamingChat?prompt=${encodeURIComponent(lastUserMessage.content)}`
       
       const eventSource = new EventSource(url)
       
@@ -464,6 +487,21 @@ const handleKeyPress = (event) => {
   }
 }
 
+// 暂停流式输出
+const pauseStreaming = () => {
+  if (eventSource.value) {
+    eventSource.value.close()
+    isStreaming.value = false
+  }
+}
+
+// 手动滚动到底部
+const scrollToBottomManually = async () => {
+  autoScroll.value = true
+  showScrollButton.value = false
+  await scrollToBottom()
+}
+
 onMounted(() => {
   // 实时获取用户信息
   fetchUserInfo()
@@ -657,7 +695,18 @@ const goToAdmin = () => {
       
       <!-- 聊天区域 -->
       <div class="chat-container">
-        <div class="chat-content" ref="chatContentRef">
+        <div class="chat-content" ref="chatContentRef" @scroll="handleScroll">
+          <!-- 回到底部按钮 -->
+          <button 
+            v-if="showScrollButton" 
+            class="scroll-to-bottom-button" 
+            @click="scrollToBottomManually"
+            title="回到底部"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="18 15 12 21 6 15"/>
+            </svg>
+          </button>
           <!-- 消息列表 -->
           <div v-if="messages.length === 0" class="welcome-message">
             <div class="robot-icon">
@@ -789,6 +838,7 @@ const goToAdmin = () => {
               </button>
               <div class="char-count">{{ inputText.length }}/200</div>
               <button 
+                v-if="!isStreaming" 
                 class="send-button" 
                 @click="sendMessage"
                 :disabled="isLoading || !inputText.trim()"
@@ -796,6 +846,16 @@ const goToAdmin = () => {
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="22" y1="2" x2="11" y2="13"/>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              </button>
+              <button 
+                v-else 
+                class="pause-button" 
+                @click="pauseStreaming"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="6" y="4" width="4" height="16"/>
+                  <rect x="14" y="4" width="4" height="16"/>
                 </svg>
               </button>
             </div>
@@ -1220,6 +1280,14 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* 隐藏滚动条 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* 隐藏滚动条 - Chrome, Safari and Opera */
+.chat-content::-webkit-scrollbar {
+  display: none;
 }
 
 .welcome-message {
@@ -1429,6 +1497,7 @@ html, body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   width: 100%;
   max-width: 800px;
+  margin: 0;
 }
 
 .input-wrapper input {
@@ -1493,6 +1562,51 @@ html, body {
 .send-button:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.pause-button {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.pause-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+}
+
+/* 回到底部按钮 */
+.scroll-to-bottom-button {
+  position: fixed;
+  bottom: 100px;
+  right: 40px;
+  width: 48px;
+  height: 48px;
+  border: 2px solid #000;
+  border-radius: 50%;
+  background-color: white;
+  color: black;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 99;
+}
+
+.scroll-to-bottom-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  background-color: #f5f5f5;
 }
 
 /* 响应式设计 */

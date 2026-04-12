@@ -2,9 +2,7 @@ package com.azheng.boot.kb.controller;
 
 import com.azheng.boot.kb.controller.request.*;
 import com.azheng.boot.kb.controller.vo.KnowledgeChunkVO;
-import com.azheng.boot.kb.controller.vo.KnowledgeDocumentVO;
 import com.azheng.boot.kb.service.KnowledgeChunkService;
-import com.azheng.boot.kb.service.KnowledgeDocumentService;
 import com.azheng.framework.exception.ServiceException;
 import com.azheng.framework.web.Result;
 import com.azheng.framework.web.Results;
