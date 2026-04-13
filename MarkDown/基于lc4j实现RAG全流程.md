@@ -516,9 +516,273 @@ lc4j提供了5个核心组件：
 
 
 
+### 1。ChatMemory接口
+
+> 表示聊天对话的内存（历史）。由于语言模型不保留对话状态，因此必须在每次与语言模型交互时提供所有之前的信息。{@link ChatMemory} 帮助跟踪对话，确保消息符合语言模型的上下文窗口。
+
+参数：id 表示聊天记忆的实体类id
+
+| 方法名                               | 作用                                                         |
+| ------------------------------------ | ------------------------------------------------------------ |
+| add (ChatMessage... messages)        | 将消息添加到聊天内存中                                       |
+| set (Iterable<ChatMessage> messages) | 将聊天内存中的所有消息替换为指定的消息。该方法替换整个消息历史，而不是附加到历史上。这种方法通常用于需要重写聊天内存以实现内存压缩等功能 |
+| messages                             | 从聊天内存中提取消息。根据实现方式不同，它可能不会返回所有先前添加的消息，而是返回子集、摘要或它们的组合。 |
+| clear                                | 清除聊天记忆                                                 |
 
 
-## 意图管理
+
+![image-20260412163822056](./../../../images/image-20260412163822056-1775983324347-1.png)
+
+
+
+#### MessageWindowChatMemory消息条数窗口记忆
+
+**作用：**以**消息条数**为窗口边界，自动维护最近 N 条消息，超出则淘汰最旧消息，确保上下文不无限增长。
+
+
+
+**实现原理：**
+
+1.核心参数：`maxMessages`（默认值 10），控制窗口保留的最大消息数
+
+2.数据结构：内部维护有序消息列表，按时间戳升序排列
+
+3.窗口机制：
+
+- 新消息加入时，先追加至列表尾部
+- 检查总条数是否超过`maxMessages`
+- 若超出，从列表头部移除最早消息，直至条数符合限制
+
+4.特殊处理：SystemMessage 默认不会被淘汰，始终保留在窗口中
+
+
+
+**适用场景：**快速开发
+
+
+
+
+
+#### TokenWindowChatMemory精准 Token 数量窗口记忆
+
+**作用：**以**Token 总数**为窗口边界，确保对话历史总 Token 数不超过模型上下文限制，同时优化 Token 成本。
+
+**实现原理：**
+
+核心参数：
+
+- `maxTokens`：窗口允许的最大 Token 数（如 4000）
+- `tokenCountEstimator`：Token 计数器，用于估算每条消息的 Token 数
+
+核心算法（1.11.0）：
+
+1. 新消息加入前，先计算当前窗口总 Token 数
+2. 估算新消息 Token 数，预判是否超出`maxTokens`
+3. 若超出，从列表头部开始移除最早消息，直至总 Token 数≤`maxTokens`
+4. 追加新消息至列表尾部
+
+特殊处理：
+
+- 优先保留 SystemMessage，仅在必要时才淘汰
+- 消息作为整体处理，不会拆分单条消息的 Token
+
+**适用场景：**RAG
+
+### 2.ChatMemoryStore持久化
+
+![image-20260412165622058](./../../../images/image-20260412165622058.png)
+
+
+
+#### InMemoryChatMemoryStore
+
+**作用：**基于 **JVM 内存** 的临时对话存储，是 LC4J **默认、零依赖**的记忆存储实现，
+
+
+
+**实现原理：**
+
+- 底层用 `ConcurrentHashMap<String, List<ChatMessage>>` 存储
+- Key：`memoryId`（用户 / 会话唯一标识）
+- Value：该会话的完整对话消息列表
+- 线程安全、无第三方依赖、读写速度极快
+- **服务重启 / 容器销毁 → 所有记忆彻底丢失**
+
+
+
+**适用场景：**临时会话
+
+
+
+
+
+#### SingleSlotChatMemoryStore
+
+
+
+
+
+
+
+
+
+
+
+## 提示词工程
+
+整体架构设计：
+
+分层设计：整个提示词工程分为：资源管理层、渲染引擎层、编排业务层、缓存优化层这四个层面，构建了完整的提示词处理流水线。
+
+集中管理：通过常量类统一管理提示词路径，实现提示词工程的可维护性
+
+
+
+具体内容：
+
+资源管理层
+
+### 资源管理层
+
+- PromptTemplateLoader ：负责从类路径加载提示词模板，支持缓存机制
+- 采用 ConcurrentHashMap 实现进程内缓存，提升性能
+- 支持模板变量填充，实现动态内容注入
+
+##### PromptTemplateLoader
+
+```java
+/**
+ * 提示词模版加载器
+ */
+@Slf4j
+@RequiredArgsConstructor
+public class PromptTemplateLoader {
+
+    private final ResourceLoader resourceLoader;
+    private final Map<String, String> cache = new ConcurrentHashMap<>();
+
+
+    /**
+     * 加载指定路径的提示模板
+     *
+     * @param path 模板文件路径，支持classpath:前缀
+     * @return 模板内容字符串
+     * @throws IllegalArgumentException 当路径为空时抛出
+     * @throws IllegalStateException    当模板文件不存在或读取失败时抛出
+     */
+    public String load(String path) {
+        if (StrUtil.isBlank(path)) {
+            throw new IllegalArgumentException("提示模板路径为空");
+        }
+        // 本地缓存进ConcurrentHashMap
+        return cache.computeIfAbsent(path, this::readResource);
+    }
+
+    /**
+     * 渲染提示模板，将模板中的占位符替换为实际值
+     *
+     * @param path  模板文件路径
+     * @param slots 占位符映射表，键为占位符名称，值为替换内容
+     * @return 渲染后的完整提示文本
+     */
+    public String render(String path, Map<String, String> slots) {
+        String template = load(path);
+        String filled = PromptTemplateUtils.fillSlots(template, slots);
+        return PromptTemplateUtils.cleanupPrompt(filled);
+    }
+
+
+
+    /**
+     * 从资源路径中读取模版文件
+     */
+    public String readResource(String path){
+        //归一化路径为根目录
+        String location = path.startsWith("classpath:") ? path : "classpath:" + path;
+
+        //使用resourceLoader加载
+        Resource resource = resourceLoader.getResource(location);
+        if(!resource.exists()){
+            throw new IllegalStateException("提示词模版路径不存在：" + path);
+        }
+        //读取文件的输入流
+        try (InputStream inputStream = resource.getInputStream()){
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+        }catch (IOException e){
+            log.error("读取提示模板失败，路径：{}", path, e);
+            throw new IllegalStateException("读取提示模板失败，路径：" + path, e);
+        }
+    }
+}
+```
+
+
+
+
+
+
+
+### 渲染引擎层
+
+> 构建提示词工程的 渲染引擎层 ，扩展模板渲染能力，支持更复杂的变量类型和渲染场景。这一层是连接资源管理层和编排服务层的桥梁，提供灵活、强大的模板渲染功能。
+
+
+
+AdvancedPromptRenderer
+
+PromptContext
+
+### 编排服务层
+
+
+
+### 缓存优化层
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 意图识别
 
 #### 1.数据表设计
 
@@ -707,3 +971,22 @@ public enum IntentKind {
 
 #### 3.数据模型类
 
+
+
+
+
+
+
+
+
+## 多路召回
+
+
+
+## rerank重排
+
+
+
+
+
+## 生成
