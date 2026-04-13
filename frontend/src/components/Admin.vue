@@ -3,6 +3,7 @@ import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import UserManagement from './user/UserManagement.vue'
+import IntentManagement from './intent/IntentManagement.vue'
 import BaseCard from './common/BaseCard.vue'
 import BaseTable from './common/BaseTable.vue'
 import BaseButton from './common/BaseButton.vue'
@@ -1561,6 +1562,20 @@ const changeDocumentPage = (page) => {
             </span>
             <span class="menu-text" v-show="!sidebarCollapsed">知识库管理</span>
           </div>
+          <div 
+            class="menu-item"
+            :class="{ active: activeMenu === 'intent' }"
+            @click="setActiveMenu('intent')"
+          >
+            <span class="menu-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+            </span>
+            <span class="menu-text" v-show="!sidebarCollapsed">意图管理</span>
+          </div>
         </div>
       </div>
       
@@ -1674,7 +1689,7 @@ const changeDocumentPage = (page) => {
         <span class="breadcrumb-link" @click="setActiveMenu('overview')">首页</span>
         <span class="separator">/</span>
         <span v-if="activeMenu === 'knowledge' && (activeTab === 'documents' || activeTab === 'chunks')" class="breadcrumb-link" @click="activeTab = 'knowledge'">知识库管理</span>
-        <span v-else class="current">{{ activeMenu === 'overview' ? '数据概览' : activeMenu === 'knowledge' ? '知识库管理' : activeMenu === 'users' ? '用户管理' : '系统设置' }}</span>
+        <span v-else class="current">{{ activeMenu === 'overview' ? '数据概览' : activeMenu === 'knowledge' ? '知识库管理' : activeMenu === 'users' ? '用户管理' : activeMenu === 'intent' ? '意图管理' : '系统设置' }}</span>
         <span v-if="activeMenu === 'knowledge' && (activeTab === 'documents' || activeTab === 'chunks')" class="separator">/</span>
         <span v-if="activeMenu === 'knowledge' && activeTab === 'chunks'" class="breadcrumb-link" @click="activeTab = 'documents'">文档管理</span>
         <span v-else-if="activeMenu === 'knowledge' && activeTab === 'documents'" class="current">文档管理</span>
@@ -2089,6 +2104,9 @@ const changeDocumentPage = (page) => {
               </div>
             </div>
           </div>
+        </div>
+        <div v-else-if="activeMenu === 'intent'" class="page-content intent-page">
+          <IntentManagement />
         </div>
         <div v-else-if="activeMenu === 'users'" class="page-content user-page">
           <UserManagement />

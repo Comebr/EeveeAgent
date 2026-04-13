@@ -10,6 +10,8 @@ const router = useRouter()
 const userInfo = ref(null)
 const showUserMenu = ref(false)
 const sidebarCollapsed = ref(false)
+const sidebarAutoHidden = ref(true) // 默认隐藏
+const mouseNearSidebar = ref(false)
 
 // 消息提示
 const showMessage = ref(false)
@@ -515,10 +517,18 @@ if (showLoginSuccess) {
   showToast('已成功登录', 'success')
   localStorage.removeItem('showLoginSuccess')
 }
+  
+  // 智能隐藏侧边栏相关事件
+  document.addEventListener('click', handleClick)
+  document.addEventListener('wheel', handleWheel)
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  
+  // 移除智能隐藏侧边栏相关事件
+  document.removeEventListener('click', handleClick)
+  document.removeEventListener('wheel', handleWheel)
   
   // 清理所有可能的定时器
   const timers = window.__chatTimers || []
@@ -548,6 +558,32 @@ const toggleUserMenu = () => {
 
 const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value
+  // 切换时重置自动隐藏状态
+  sidebarAutoHidden.value = false
+}
+
+// 处理点击事件
+const handleClick = (event) => {
+  // 当点击侧边栏区域或侧边栏切换按钮时，显示侧边栏
+  const sidebar = document.querySelector('.sidebar')
+  const sidebarToggle = document.querySelector('.sidebar-toggle')
+  
+  if (sidebar && (sidebar.contains(event.target) || (sidebarToggle && sidebarToggle.contains(event.target)))) {
+    sidebarAutoHidden.value = false
+  }
+}
+
+// 处理滚轮事件
+const handleWheel = (event) => {
+  // 当鼠标在侧边栏区域内滚动时，显示侧边栏
+  const sidebar = document.querySelector('.sidebar')
+  if (sidebar) {
+    const rect = sidebar.getBoundingClientRect()
+    // 检测鼠标是否在侧边栏区域内（包括可能隐藏的区域）
+    if (event.clientX < rect.right + 50) {
+      sidebarAutoHidden.value = false
+    }
+  }
 }
 
 const goToAdmin = () => {
@@ -578,7 +614,7 @@ const goToAdmin = () => {
     </div>
     
     <!-- 侧边栏 -->
-    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed, 'auto-hidden': sidebarAutoHidden }">
       <!-- Logo区域 -->
       <div class="sidebar-header">
         <div class="logo">
@@ -660,7 +696,7 @@ const goToAdmin = () => {
     </aside>
     
     <!-- 主内容区 -->
-    <main class="main-content" :class="{ expanded: sidebarCollapsed }">
+    <main class="main-content" :class="{ expanded: sidebarCollapsed || sidebarAutoHidden }">
       <!-- 顶部header -->
       <header class="main-header">
         <div class="header-left">
@@ -957,6 +993,28 @@ html, body {
 .sidebar.collapsed {
   width: 60px;
   min-width: 60px;
+}
+
+.sidebar.auto-hidden {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sidebar.auto-hidden .sidebar-header,
+.sidebar.auto-hidden .sidebar-section,
+.sidebar.auto-hidden .sidebar-footer {
+  opacity: 0;
+  transform: translateX(-100%);
+  transition: all 0.3s ease;
+}
+
+.sidebar:not(.auto-hidden) .sidebar-header,
+.sidebar:not(.auto-hidden) .sidebar-section,
+.sidebar:not(.auto-hidden) .sidebar-footer {
+  opacity: 1;
+  transform: translateX(0);
+  transition: all 0.3s ease;
 }
 
 /* Logo区域 */
