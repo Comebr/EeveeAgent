@@ -3,12 +3,12 @@ import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import UserManagement from './user/UserManagement.vue'
-import IntentManagement from './intent/IntentManagement.vue'
 import BaseCard from './common/BaseCard.vue'
 import BaseTable from './common/BaseTable.vue'
 import BaseButton from './common/BaseButton.vue'
 import BaseForm from './common/BaseForm.vue'
 import FormField from './common/FormField.vue'
+import ScrollableContainer from './common/ScrollableContainer.vue'
 
 const router = useRouter()
 const userInfo = ref(null)
@@ -891,6 +891,384 @@ const changeDocumentPage = (page) => {
   documentPagination.current = page
   loadDocuments(selectedKnowledgeBase.value.id)
 }
+
+// 意图管理相关状态
+const intentTree = ref([])
+const selectedNode = ref(null)
+const intentLoading = ref(false)
+const expandedNodes = ref(new Set())
+
+// 表单数据
+const intentCreateForm = ref({
+  kbId: '',
+  intentCode: '',
+  name: '',
+  level: 0, // 0=DOMAIN,1=CATEGORY,2=INTENT
+  parentCode: '',
+  description: '',
+  examples: [],
+  examplesText: '',
+  topK: 5,
+  kind: 0, // 0=KB,1=SYSTEM
+  sortOrder: 0,
+  enabled: true,
+  promptSnippet: '',
+  promptTemplate: ''
+})
+
+// 示例问题标签
+const exampleTags = ref([])
+const newExampleTag = ref('')
+
+// 编辑表单示例问题标签
+const editExampleTags = ref([])
+const newEditExampleTag = ref('')
+
+// 表单展开状态
+const descriptionExpanded = ref(true)
+const promptExpanded = ref(false)
+const advancedExpanded = ref(false)
+
+const intentEditForm = ref({
+  id: '',
+  name: '',
+  level: 0,
+  parentCode: '',
+  description: '',
+  examples: [],
+  examplesText: '',
+  collectionName: '',
+  topK: 5,
+  kind: 0,
+  sortOrder: 0,
+  enabled: true,
+  promptSnippet: '',
+  promptTemplate: ''
+})
+
+// 示例问题
+const newExample = ref('')
+
+// 类型选项
+const levelOptions = [
+  { label: 'DOMAIN', value: 0 },
+  { label: 'CATEGORY', value: 1 },
+  { label: 'INTENT', value: 2 }
+]
+
+const kindOptions = [
+  { label: 'KB', value: 0 },
+  { label: 'SYSTEM', value: 1 }
+]
+
+// 加载意图树
+const loadIntentTree = async () => {
+  intentLoading.value = true
+  try {
+    const response = await axios.get('/intent-tree/trees')
+    if (response.data.code === '0') {
+      // 确保intentTree.value是一个数组，即使后端返回null或undefined
+      intentTree.value = response.data.data || []
+      // 默认选择第一个节点
+      if (intentTree.value.length > 0) {
+        selectedNode.value = intentTree.value[0]
+        // 默认展开所有节点
+        expandAllNodes(intentTree.value)
+      }
+    } else {
+      showToast('获取意图树失败', 'error')
+    }
+  } catch (error) {
+    console.error('获取意图树失败:', error)
+    showToast('获取意图树失败，请稍后重试', 'error')
+  } finally {
+    intentLoading.value = false
+  }
+}
+
+// 选择节点
+const selectNode = (node) => {
+  selectedNode.value = node
+}
+
+// 递归展开所有节点
+const expandAllNodes = (nodes) => {
+  nodes.forEach(node => {
+    expandedNodes.value.add(node.id)
+    if (node.children && node.children.length > 0) {
+      expandAllNodes(node.children)
+    }
+  })
+}
+
+// 切换节点展开/收起状态
+const toggleNode = (node) => {
+  const expanded = expandedNodes.value
+  if (expanded.has(node.id)) {
+    expanded.delete(node.id)
+  } else {
+    expanded.add(node.id)
+  }
+  // 触发响应式更新
+  expandedNodes.value = new Set(expanded)
+}
+
+// 添加示例问题标签
+const addExampleTag = () => {
+  if (newExampleTag.value.trim() && !exampleTags.value.includes(newExampleTag.value.trim())) {
+    exampleTags.value.push(newExampleTag.value.trim())
+    newExampleTag.value = ''
+    // 更新examplesText
+    intentCreateForm.value.examplesText = exampleTags.value.join('\n')
+  }
+}
+
+// 删除示例问题标签
+const removeExampleTag = (tag) => {
+  exampleTags.value = exampleTags.value.filter(t => t !== tag)
+  // 更新examplesText
+  intentCreateForm.value.examplesText = exampleTags.value.join('\n')
+}
+
+// 同步标签和examplesText
+const syncExampleTags = () => {
+  if (intentCreateForm.value.examplesText) {
+    exampleTags.value = intentCreateForm.value.examplesText.split('\n').filter(item => item.trim())
+  } else {
+    exampleTags.value = []
+  }
+}
+
+// 添加编辑表单示例问题标签
+const addEditExampleTag = () => {
+  if (newEditExampleTag.value.trim() && !editExampleTags.value.includes(newEditExampleTag.value.trim())) {
+    editExampleTags.value.push(newEditExampleTag.value.trim())
+    newEditExampleTag.value = ''
+    // 更新examplesText
+    intentEditForm.value.examplesText = editExampleTags.value.join('\n')
+  }
+}
+
+// 删除编辑表单示例问题标签
+const removeEditExampleTag = (tag) => {
+  editExampleTags.value = editExampleTags.value.filter(t => t !== tag)
+  // 更新examplesText
+  intentEditForm.value.examplesText = editExampleTags.value.join('\n')
+}
+
+// 同步编辑表单标签和examplesText
+const syncEditExampleTags = () => {
+  if (intentEditForm.value.examplesText) {
+    editExampleTags.value = intentEditForm.value.examplesText.split('\n').filter(item => item.trim())
+  } else {
+    editExampleTags.value = []
+  }
+}
+
+// 解析示例问题
+const parseExamples = (examples) => {
+  if (!examples) return []
+  
+  try {
+    // 尝试解析JSON字符串
+    const parsed = JSON.parse(examples)
+    if (Array.isArray(parsed)) {
+      return parsed.map(item => item.trim())
+    }
+  } catch (e) {
+    // 如果不是JSON字符串，尝试按分号分割
+    return examples.split(';').map(item => item.trim()).filter(item => item)
+  }
+  
+  return []
+}
+
+// 新建节点
+const handleIntentCreate = async () => {
+  try {
+    // 将examplesText转换为examples数组
+    if (intentCreateForm.value.examplesText) {
+      intentCreateForm.value.examples = intentCreateForm.value.examplesText.split('\n').filter(item => item.trim())
+    } else {
+      intentCreateForm.value.examples = []
+    }
+    
+    // 将布尔值转换为数字
+    const formData = {
+      ...intentCreateForm.value,
+      enabled: intentCreateForm.value.enabled ? 1 : 0
+    }
+    
+    const response = await axios.post('/intent-tree/createNode', formData)
+    if (response.data.code === '0') {
+      showToast('创建成功', 'success')
+      showCreateModal.value = false
+      loadIntentTree()
+      resetCreateForm()
+    } else {
+      showToast(response.data.message || '创建失败', 'error')
+    }
+  } catch (error) {
+    console.error('创建节点失败:', error)
+    showToast('创建失败，请稍后重试', 'error')
+  }
+}
+
+// 更新节点
+const handleIntentUpdate = async () => {
+  try {
+    // 将examplesText转换为examples数组
+    if (intentEditForm.value.examplesText) {
+      intentEditForm.value.examples = intentEditForm.value.examplesText.split('\n').filter(item => item.trim())
+    } else {
+      intentEditForm.value.examples = []
+    }
+    
+    // 将布尔值转换为数字
+    const formData = {
+      ...intentEditForm.value,
+      enabled: intentEditForm.value.enabled ? 1 : 0
+    }
+    
+    const response = await axios.put(`/intent-tree/mkdir/${intentEditForm.value.id}`, formData)
+    if (response.data.code === '0') {
+      showToast('更新成功', 'success')
+      showEditModal.value = false
+      loadIntentTree()
+    } else {
+      showToast(response.data.message || '更新失败', 'error')
+    }
+  } catch (error) {
+    console.error('更新节点失败:', error)
+    showToast('更新失败，请稍后重试', 'error')
+  }
+}
+
+// 删除节点
+const handleDelete = async () => {
+  if (!selectedNode.value) return
+  
+  try {
+    const response = await axios.delete(`/intent-tree/remove/${selectedNode.value.id}`)
+    if (response.data.code === '0') {
+      showToast('删除成功', 'success')
+      showDeleteConfirm.value = false
+      selectedNode.value = null
+      loadIntentTree()
+    } else {
+      showToast(response.data.message || '删除失败', 'error')
+    }
+  } catch (error) {
+    console.error('删除节点失败:', error)
+    showToast('删除失败，请稍后重试', 'error')
+  }
+}
+
+// 打开新建节点模态框
+const openCreateModal = () => {
+  resetCreateForm()
+  if (selectedNode.value) {
+    intentCreateForm.value.parentCode = selectedNode.value.intentCode
+    intentCreateForm.value.level = selectedNode.value.level + 1
+  }
+  showCreateModal.value = true
+}
+
+// 打开编辑节点模态框
+const openEditModal = () => {
+  if (!selectedNode.value) return
+  
+  intentEditForm.value = {
+    id: selectedNode.value.id,
+    name: selectedNode.value.name,
+    level: selectedNode.value.level,
+    parentCode: selectedNode.value.parentCode,
+    description: selectedNode.value.description,
+    examples: selectedNode.value.examples ? selectedNode.value.examples.split(';') : [],
+    examplesText: selectedNode.value.examples ? selectedNode.value.examples.split(';').join('\n') : '',
+    collectionName: selectedNode.value.collectionName,
+    topK: selectedNode.value.topK,
+    kind: selectedNode.value.kind,
+    sortOrder: selectedNode.value.sortOrder,
+    enabled: selectedNode.value.enabled === 1,
+    promptSnippet: selectedNode.value.promptSnippet,
+    promptTemplate: selectedNode.value.promptTemplate
+  }
+  
+  // 同步标签
+  syncEditExampleTags()
+  
+  showEditModal.value = true
+}
+
+// 重置创建表单
+const resetCreateForm = () => {
+  intentCreateForm.value = {
+    kbId: '',
+    intentCode: '',
+    name: '',
+    level: 0,
+    parentCode: '',
+    description: '',
+    examples: [],
+    examplesText: '',
+    topK: 5,
+    kind: 0,
+    sortOrder: 0,
+    enabled: true,
+    promptSnippet: '',
+    promptTemplate: ''
+  }
+  
+  // 重置展开状态
+  descriptionExpanded.value = true
+  promptExpanded.value = false
+  advancedExpanded.value = false
+}
+
+// 添加示例问题
+const addExample = () => {
+  if (newExample.value && !intentCreateForm.value.examples.includes(newExample.value)) {
+    intentCreateForm.value.examples.push(newExample.value)
+    newExample.value = ''
+  }
+}
+
+// 添加编辑示例问题
+const addEditExample = () => {
+  if (newExample.value && !intentEditForm.value.examples.includes(newExample.value)) {
+    intentEditForm.value.examples.push(newExample.value)
+    newExample.value = ''
+  }
+}
+
+// 删除示例问题
+const removeExample = (index) => {
+  intentCreateForm.value.examples.splice(index, 1)
+}
+
+// 删除编辑示例问题
+const removeEditExample = (index) => {
+  intentEditForm.value.examples.splice(index, 1)
+}
+
+// 刷新意图树
+const refreshIntentTree = () => {
+  loadIntentTree()
+}
+
+// 初始化意图树
+onMounted(() => {
+  // 从本地存储获取用户信息
+  const storedUserInfo = localStorage.getItem('userInfo')
+  if (storedUserInfo) {
+    userInfo.value = JSON.parse(storedUserInfo)
+  }
+  // 获取知识库列表
+  fetchKnowledgeList()
+  // 加载意图树
+  loadIntentTree()
+})
 </script>
 
 <style scoped>
@@ -1481,6 +1859,473 @@ const changeDocumentPage = (page) => {
   margin: 0;
 }
 
+/* 意图管理页面样式 */
+.intent-page {
+  padding: 24px;
+}
+
+.content-container {
+  display: flex;
+  gap: 24px;
+  height: calc(100vh - 160px);
+}
+
+.tree-section {
+  flex: 0 0 320px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.intent-tree {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.tree-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fafafa;
+}
+
+.tree-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.tree-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tree-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.node-item {
+  margin-bottom: 4px;
+}
+
+.node-content {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 2px;
+}
+
+.node-content:hover {
+  background: #f5f7fa;
+}
+
+.node-content.selected {
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+}
+
+.node-toggle {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  font-size: 10px;
+  color: #666;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.node-info {
+  flex: 1;
+}
+
+.node-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.node-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: #999;
+}
+
+.node-children {
+  margin-left: 24px;
+  margin-top: 4px;
+}
+
+.detail-section {
+  flex: 1;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fafafa;
+}
+
+.detail-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.detail-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.node-basic-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.info-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.info-value {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-enabled {
+  background: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.status-disabled {
+  background: #fffbe6;
+  color: #faad14;
+  border: 1px solid #ffe58f;
+}
+
+.examples-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.example-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.example-text {
+  flex: 1;
+  font-size: 14px;
+  color: #333;
+}
+
+.remove-example {
+  flex-shrink: 0;
+}
+
+.add-example {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.add-example input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.add-example input:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.prompt-section {
+  margin-top: 8px;
+}
+
+.prompt-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 120px;
+  background: #f8f9fa;
+  color: #333;
+}
+
+.prompt-textarea:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.create-modal {
+  max-width: 700px;
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fafafa;
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.close-button {
+  padding: 4px;
+  min-width: auto;
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.modal-subtitle {
+  font-size: 14px;
+  color: #666;
+  margin: 0 0 20px 0;
+}
+
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  background: #fafafa;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.form-section {
+  margin-bottom: 16px;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.section-header {
+  padding: 12px 16px;
+  background: #fafafa;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.section-header:hover {
+  background: #f0f0f0;
+}
+
+.section-toggle {
+  font-size: 12px;
+  color: #666;
+  transition: transform 0.3s;
+}
+
+.section-content {
+  padding: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.delete-warning {
+  text-align: center;
+  padding: 24px;
+}
+
+.delete-warning svg {
+  margin-bottom: 16px;
+}
+
+.delete-warning p {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.delete-hint {
+  font-size: 12px;
+  color: #999;
+  margin-top: 8px !important;
+}
+
+/* 空状态样式 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  color: #999;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.empty-state p {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+}
+
+/* 滚动容器样式 */
+.scrollable-container {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.scrollable-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollable-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.scrollable-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.scrollable-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
 /* 知识块信息样式 */
 .kb-name-title,
 .kb-id-title {
@@ -1704,6 +2549,547 @@ const changeDocumentPage = (page) => {
           <h2>数据概览</h2>
           <p>欢迎使用 Eevee 管理后台</p>
         </div>
+        <div v-else-if="activeMenu === 'intent'" class="page-content intent-page">
+          <!-- 页面标题 -->
+          <div class="page-header">
+            <div class="header-left">
+              <h1 class="page-title">意图树配置</h1>
+              <p class="page-subtitle">配置意图层级、类型和节点关系</p>
+            </div>
+            <div class="header-actions">
+              <BaseButton type="secondary" size="small" @click="refreshIntentTree" class="refresh-button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <polyline points="1 20 1 14 7 14"/>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                刷新
+              </BaseButton>
+              <BaseButton type="primary" size="small" @click="openCreateModal" class="create-button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                新建根节点
+              </BaseButton>
+            </div>
+          </div>
+          
+          <!-- 内容区域 -->
+          <div class="intent-management-container">
+            <!-- 左侧意图树结构 -->
+            <div class="intent-tree-panel">
+              <div class="panel-header">
+                <h3 class="panel-title">意图树结构</h3>
+                <p class="panel-subtitle">点击节点查看详情或进行编辑</p>
+              </div>
+              <div class="panel-content">
+                <div v-if="intentLoading" class="loading-state">
+                  <div class="loading-spinner"></div>
+                  <p>加载中...</p>
+                </div>
+                <div v-else-if="intentTree.length === 0" class="empty-state">
+                  <div class="empty-icon">📁</div>
+                  <p>暂无意图节点</p>
+                  <p>点击右上角"新建根节点"开始创建</p>
+                </div>
+                <div v-else class="tree-content">
+                  <div v-for="node in intentTree" :key="node.id" class="tree-node">
+                    <div 
+                      class="node-item" 
+                      :class="{ selected: selectedNode?.id === node.id }"
+                      @click="selectNode(node)"
+                    >
+                      <div 
+                        class="node-toggle" 
+                        v-if="node.children && node.children.length > 0"
+                        @click.stop="toggleNode(node)"
+                      >
+                        {{ expandedNodes.has(node.id) ? '▼' : '▶' }}
+                      </div>
+                      <div class="node-toggle" v-else></div>
+                      <div class="node-name">{{ node.name }}</div>
+                      <div class="node-badges">
+                        <span class="badge level-badge">{{ levelOptions.find(opt => opt.value === node.level)?.label }}</span>
+                        <span class="badge kind-badge">{{ kindOptions.find(opt => opt.value === node.kind)?.label }}</span>
+                      </div>
+                    </div>
+                    <div v-if="node.children && node.children.length > 0 && expandedNodes.has(node.id)" class="node-children">
+                      <div v-for="child in node.children" :key="child.id" class="tree-node">
+                        <div 
+                          class="node-item" 
+                          :class="{ selected: selectedNode?.id === child.id }"
+                          @click="selectNode(child)"
+                        >
+                          <div 
+                            class="node-toggle" 
+                            v-if="child.children && child.children.length > 0"
+                            @click.stop="toggleNode(child)"
+                          >
+                            {{ expandedNodes.has(child.id) ? '▼' : '▶' }}
+                          </div>
+                          <div class="node-toggle" v-else></div>
+                          <div class="node-name">{{ child.name }}</div>
+                          <div class="node-badges">
+                            <span class="badge level-badge">{{ levelOptions.find(opt => opt.value === child.level)?.label }}</span>
+                            <span class="badge kind-badge">{{ kindOptions.find(opt => opt.value === child.kind)?.label }}</span>
+                          </div>
+                        </div>
+                        <div v-if="child.children && child.children.length > 0 && expandedNodes.has(child.id)" class="node-children">
+                          <div v-for="grandchild in child.children" :key="grandchild.id" class="tree-node">
+                            <div 
+                              class="node-item" 
+                              :class="{ selected: selectedNode?.id === grandchild.id }"
+                              @click="selectNode(grandchild)"
+                            >
+                              <div class="node-toggle"></div>
+                              <div class="node-name">{{ grandchild.name }}</div>
+                              <div class="node-badges">
+                                <span class="badge level-badge">{{ levelOptions.find(opt => opt.value === grandchild.level)?.label }}</span>
+                                <span class="badge kind-badge">{{ kindOptions.find(opt => opt.value === grandchild.kind)?.label }}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 右侧节点详情 -->
+            <div class="node-detail-panel">
+              <div class="panel-header">
+                <div>
+                  <h3 class="panel-title">节点详情</h3>
+                  <p class="panel-subtitle">查看并管理当前选择的节点</p>
+                </div>
+                <div class="panel-actions" v-if="selectedNode">
+                  <BaseButton type="primary" size="small" @click="openCreateModal" class="action-button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    新增子节点
+                  </BaseButton>
+                  <BaseButton type="secondary" size="small" @click="openEditModal" class="action-button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    编辑节点
+                  </BaseButton>
+                  <BaseButton type="danger" size="small" @click="showDeleteConfirm = true" class="action-button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      <line x1="10" y1="11" x2="10" y2="17"/>
+                      <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                    删除节点
+                  </BaseButton>
+                </div>
+              </div>
+              <div class="panel-content">
+                <div v-if="!selectedNode" class="empty-state">
+                  <div class="empty-icon">📋</div>
+                  <p>请选择一个节点查看详情</p>
+                </div>
+                <div v-else class="node-details">
+                  <!-- 节点基本信息 -->
+                  <div class="node-header-section">
+                    <h3 class="node-title">{{ selectedNode.name }}</h3>
+                    <div class="node-meta">
+                      <span class="badge level-badge">{{ levelOptions.find(opt => opt.value === selectedNode.level)?.label }}</span>
+                      <span class="badge kind-badge">{{ kindOptions.find(opt => opt.value === selectedNode.kind)?.label }}</span>
+                      <span class="badge status-badge" :class="selectedNode.enabled === 1 ? 'status-enabled' : 'status-disabled'">
+                        {{ selectedNode.enabled === 1 ? '启用' : '禁用' }}
+                      </span>
+                    </div>
+                    <div class="node-code">{{ selectedNode.intentCode }}</div>
+                  </div>
+                  
+                  <!-- 节点操作 - 已移动到面板头部 -->
+                  
+                  <!-- 详细信息 -->
+                  <div class="detail-section">
+                    <h4 class="section-title">基本信息</h4>
+                    <div class="info-grid">
+                      <div class="info-item">
+                        <span class="info-label">父节点</span>
+                        <span class="info-value">{{ selectedNode.parentCode || 'ROOT' }}</span>
+                      </div>
+                      <div class="info-item">
+                        <span class="info-label">排序</span>
+                        <span class="info-value">{{ selectedNode.sortOrder }}</span>
+                      </div>
+                      <div class="info-item">
+                        <span class="info-label">Collection</span>
+                        <span class="info-value">{{ selectedNode.collectionName || '默认' }}</span>
+                      </div>
+                      <div class="info-item">
+                        <span class="info-label">节点 TopK</span>
+                        <span class="info-value">{{ selectedNode.topK || '默认（全局）' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="detail-section">
+                    <h4 class="section-title">描述</h4>
+                    <div class="description-content">
+                      {{ selectedNode.description || '无描述' }}
+                    </div>
+                  </div>
+                  
+                  <div class="detail-section">
+                    <h4 class="section-title">示例问题</h4>
+                    <div class="example-tags">
+                      <span 
+                        v-for="(example, index) in parseExamples(selectedNode.examples)" 
+                        :key="index" 
+                        class="example-tag"
+                      >
+                        {{ example }}
+                      </span>
+                      <div v-if="!selectedNode.examples || parseExamples(selectedNode.examples).length === 0" class="empty-state">
+                        <p>暂无示例问题</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- 提示词模板 - 已隐藏 -->
+                  <!-- <div class="detail-section">
+                    <h4 class="section-title">提示词模板</h4>
+                    <div class="prompt-section">
+                      <textarea 
+                        class="prompt-textarea" 
+                        :value="selectedNode.promptTemplate || '无模板'" 
+                        readonly
+                      ></textarea>
+                    </div>
+                  </div> -->
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 新建节点模态框 -->
+          <div v-if="showCreateModal" class="modal-overlay">
+            <div class="modal create-modal">
+              <div class="modal-header">
+                <h3 class="modal-title">新建意图节点</h3>
+                <BaseButton type="secondary" size="small" @click="showCreateModal = false" class="close-button">&times;</BaseButton>
+              </div>
+              <ScrollableContainer>
+                <div class="modal-body">
+                  <p class="modal-subtitle">配置意图节点的层级、类型与描述信息</p>
+                  <BaseForm @submit="handleIntentCreate" :show-actions="false">
+                    <div class="form-grid">
+                      <FormField 
+                        label="节点名称" 
+                        name="name"
+                        v-model="intentCreateForm.name" 
+                        placeholder="例如：OA系统" 
+                        :required="true"
+                        type="text"
+                      />
+                      <FormField 
+                        label="意图标识" 
+                        name="intentCode"
+                        v-model="intentCreateForm.intentCode" 
+                        placeholder="例如：biz-oa" 
+                        type="text"
+                      />
+                      <FormField 
+                        label="层级" 
+                        name="level"
+                        v-model="intentCreateForm.level" 
+                        :required="true"
+                        type="select"
+                        :options="levelOptions"
+                      />
+                      <FormField 
+                        label="类型" 
+                        name="kind"
+                        v-model="intentCreateForm.kind" 
+                        :required="true"
+                        type="select"
+                        :options="kindOptions"
+                      />
+                      <FormField 
+                        label="父节点" 
+                        name="parentCode"
+                        v-model="intentCreateForm.parentCode" 
+                        type="select"
+                        :options="[{ label: 'ROOT', value: '' }]"
+                      />
+                      <FormField 
+                        label="知识库" 
+                        name="kbId"
+                        v-model="intentCreateForm.kbId" 
+                        type="select"
+                        :options="[]"
+                        :show-empty-option="true"
+                        empty-option-text="请选择知识库"
+                      />
+                    </div>
+                    
+                    <!-- 描述与示例 -->
+                    <div class="form-section">
+                      <div class="section-header" @click="descriptionExpanded = !descriptionExpanded">
+                        <span class="section-title">描述与示例</span>
+                        <span class="section-toggle">{{ descriptionExpanded ? '▼' : '▶' }}</span>
+                      </div>
+                      <div v-if="descriptionExpanded" class="section-content">
+                        <FormField 
+                          label="描述" 
+                          name="description"
+                          v-model="intentCreateForm.description" 
+                          placeholder="节点的语义说明与说明场景" 
+                          type="textarea"
+                          :rows="4"
+                        />
+                        <FormField 
+                          label="示例问题"
+                          name="examplesText"
+                        >
+                          <!-- 标签显示区域 -->
+                          <div class="example-tags">
+                            <span 
+                              v-for="tag in exampleTags" 
+                              :key="tag" 
+                              class="example-tag"
+                            >
+                              {{ tag }}
+                              <span class="tag-remove" @click="removeExampleTag(tag)">×</span>
+                            </span>
+                          </div>
+                          <!-- 输入区域 -->
+                          <div class="example-input">
+                            <input 
+                              type="text" 
+                              v-model="newExampleTag" 
+                              placeholder="输入示例问题并按回车添加"
+                              @keyup.enter="addExampleTag"
+                              class="example-input-field"
+                            />
+                            <BaseButton type="primary" size="small" @click="addExampleTag">添加</BaseButton>
+                          </div>
+                          <!-- 隐藏的textarea用于保持数据绑定 -->
+                          <textarea 
+                            v-model="intentCreateForm.examplesText" 
+                            class="hidden-textarea"
+                            @input="syncExampleTags"
+                          ></textarea>
+                        </FormField>
+                      </div>
+                    </div>
+                    
+                    <!-- Prompt 配置 -->
+                    <div class="form-section">
+                      <div class="section-header" @click="promptExpanded = !promptExpanded">
+                        <span class="section-title">Prompt 配置</span>
+                        <span class="section-toggle">{{ promptExpanded ? '▼' : '▶' }}</span>
+                      </div>
+                      <div v-if="promptExpanded" class="section-content">
+                        <FormField 
+                          label="短规则片段（可选）" 
+                          name="promptSnippet"
+                          v-model="intentCreateForm.promptSnippet" 
+                          placeholder="多意图场景下的特定规则，会添加到整体提示词中" 
+                          type="textarea"
+                          :rows="3"
+                        />
+                        <FormField 
+                          label="Prompt模板（可选）" 
+                          name="promptTemplate"
+                          v-model="intentCreateForm.promptTemplate" 
+                          placeholder="场景用的完整Prompt模板，KB和MCP节点都可配置" 
+                          type="textarea"
+                          :rows="5"
+                        />
+                      </div>
+                    </div>
+                    
+                    <!-- 高级设置 -->
+                    <div class="form-section">
+                      <div class="section-header" @click="advancedExpanded = !advancedExpanded">
+                        <span class="section-title">高级设置</span>
+                        <span class="section-toggle">{{ advancedExpanded ? '▼' : '▶' }}</span>
+                      </div>
+                      <div v-if="advancedExpanded" class="section-content">
+                        <div class="form-grid">
+                          <FormField 
+                            label="节点 TopK（可选）" 
+                            name="topK"
+                            v-model="intentCreateForm.topK" 
+                            placeholder="留空则使用全局 TopK" 
+                            type="number"
+                          />
+                          <FormField 
+                            label="排序" 
+                            name="sortOrder"
+                            v-model="intentCreateForm.sortOrder" 
+                            placeholder="0" 
+                            type="number"
+                          />
+                        </div>
+                        <FormField 
+                          label="启用节点" 
+                          name="enabled"
+                          v-model="intentCreateForm.enabled" 
+                          type="switch"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                      <BaseButton type="secondary" @click="showCreateModal = false">取消</BaseButton>
+                      <BaseButton type="primary" native-type="submit">创建</BaseButton>
+                    </div>
+                  </BaseForm>
+                </div>
+              </ScrollableContainer>
+            </div>
+          </div>
+          
+          <!-- 编辑节点模态框 -->
+          <div v-if="showEditModal" class="modal-overlay">
+            <div class="modal">
+              <div class="modal-header">
+                <h3 class="modal-title">编辑节点</h3>
+                <BaseButton type="secondary" size="small" @click="showEditModal = false" class="close-button">&times;</BaseButton>
+              </div>
+              <ScrollableContainer>
+                <div class="modal-body">
+                  <BaseForm @submit="handleIntentUpdate" :show-actions="false">
+                    <FormField 
+                      label="节点名称" 
+                      name="name"
+                      v-model="intentEditForm.name" 
+                      placeholder="请输入节点名称" 
+                      :required="true"
+                      type="text"
+                    />
+                    <FormField 
+                      label="级别" 
+                      name="level"
+                      v-model="intentEditForm.level" 
+                      :required="true"
+                      type="select"
+                      :options="levelOptions"
+                    />
+                    <FormField 
+                      label="父节点编码" 
+                      name="parentCode"
+                      v-model="intentEditForm.parentCode" 
+                      placeholder="请输入父节点编码" 
+                      type="text"
+                    />
+                    <FormField 
+                      label="类型" 
+                      name="kind"
+                      v-model="intentEditForm.kind" 
+                      :required="true"
+                      type="select"
+                      :options="kindOptions"
+                    />
+                    <FormField 
+                      label="描述" 
+                      name="description"
+                      v-model="intentEditForm.description" 
+                      placeholder="请输入节点描述" 
+                      type="textarea"
+                      :rows="4"
+                    />
+                    <FormField label="示例问题">
+                      <!-- 标签显示区域 -->
+                      <div class="example-tags">
+                        <span 
+                          v-for="tag in editExampleTags" 
+                          :key="tag" 
+                          class="example-tag"
+                        >
+                          {{ tag }}
+                          <span class="tag-remove" @click="removeEditExampleTag(tag)">×</span>
+                        </span>
+                      </div>
+                      <!-- 输入区域 -->
+                      <div class="example-input">
+                        <input 
+                          type="text" 
+                          v-model="newEditExampleTag" 
+                          placeholder="输入示例问题并按回车添加"
+                          @keyup.enter="addEditExampleTag"
+                          class="example-input-field"
+                        />
+                        <BaseButton type="primary" size="small" @click="addEditExampleTag">添加</BaseButton>
+                      </div>
+                      <!-- 隐藏的textarea用于保持数据绑定 -->
+                      <textarea 
+                        v-model="intentEditForm.examplesText" 
+                        class="hidden-textarea"
+                        @input="syncEditExampleTags"
+                      ></textarea>
+                    </FormField>
+                    <FormField 
+                      label="排序" 
+                      name="sortOrder"
+                      v-model="intentEditForm.sortOrder" 
+                      placeholder="请输入排序值" 
+                      type="number"
+                    />
+                    <FormField 
+                      label="状态" 
+                      name="enabled"
+                      v-model="intentEditForm.enabled" 
+                      type="switch"
+                    />
+                    <FormField 
+                      label="提示词模板" 
+                      name="promptTemplate"
+                      v-model="intentEditForm.promptTemplate" 
+                      placeholder="请输入提示词模板" 
+                      type="textarea"
+                      :rows="5"
+                    />
+                    <div class="form-actions">
+                      <BaseButton type="secondary" @click="showEditModal = false">取消</BaseButton>
+                      <BaseButton type="primary" native-type="submit">保存</BaseButton>
+                    </div>
+                  </BaseForm>
+                </div>
+              </ScrollableContainer>
+            </div>
+          </div>
+          
+          <!-- 删除确认模态框 -->
+          <div v-if="showDeleteConfirm" class="modal-overlay">
+            <div class="modal">
+              <div class="modal-header">
+                <h3 class="modal-title">确认删除</h3>
+                <BaseButton type="secondary" size="small" @click="showDeleteConfirm = false" class="close-button">&times;</BaseButton>
+              </div>
+              <div class="modal-body">
+                <div class="delete-warning">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="15" y1="9" x2="9" y2="15"/>
+                    <line x1="9" y1="9" x2="15" y2="15"/>
+                  </svg>
+                  <p>确定要删除节点 <strong>{{ selectedNode?.name }}</strong> 吗？此操作不可撤销。</p>
+                  <p class="delete-hint">删除后，与此节点相关的所有子节点也将被删除。</p>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <BaseButton type="secondary" @click="showDeleteConfirm = false">取消</BaseButton>
+                <BaseButton type="danger" @click="handleDelete">删除</BaseButton>
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <div v-else-if="activeMenu === 'knowledge'" class="page-content knowledge-page">
           <div v-if="activeTab === 'knowledge'">
             <!-- 页面标题和操作栏 -->
@@ -2560,7 +3946,7 @@ const changeDocumentPage = (page) => {
 .section-title {
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.5);
+  color: white;
   margin-bottom: 12px;
   padding: 0 12px;
   text-transform: uppercase;
@@ -2594,7 +3980,7 @@ const changeDocumentPage = (page) => {
 
 .menu-item.active {
   background-color: rgba(102, 126, 234, 0.2);
-  color: #667eea;
+  color: white;
   position: relative;
 }
 
@@ -4707,4 +6093,615 @@ input:checked + .slider:before {
     transform: translateY(0);
   }
 }
+
+/* 意图管理页面样式 */
+.intent-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+}
+
+/* 页面标题 */
+.intent-page .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24px 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.intent-page .header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.intent-page .page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.intent-page .page-subtitle {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+}
+
+.intent-page .header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.intent-page .refresh-button {
+  margin-right: 8px;
+}
+
+/* 内容容器 */
+.intent-page .content-container {
+  display: flex;
+  gap: 20px;
+  flex: 1;
+  min-height: 600px;
+  overflow: hidden;
+  padding: 0 24px;
+}
+
+.intent-page .content-container > div {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 卡片样式 */
+.intent-page .card {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e8e8e8;
+  width: 100%;
+  height: 100%;
+}
+
+.intent-page .card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background-color: #fafafa;
+}
+
+.intent-page .card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.intent-page .card-subtitle {
+  font-size: 12px;
+  color: #999;
+  margin: 0;
+}
+
+.intent-page .card-body {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+/* 意图树卡片 */
+.intent-page .tree-card {
+  min-width: 300px;
+}
+
+/* 节点详情卡片 */
+.intent-page .detail-card {
+  min-width: 300px;
+}
+
+/* BaseCard 自定义样式 */
+/* 内容容器样式 */
+.intent-page .content-container {
+  display: flex;
+  gap: 20px;
+  flex: 1;
+  min-height: 600px;
+  overflow: hidden;
+  padding: 0 24px;
+}
+
+/* 卡片样式 */
+.intent-page .card {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e8e8e8;
+  flex: 1;
+  min-width: 300px;
+  max-width: 50%;
+}
+
+/* 意图管理容器 */
+.intent-management-container {
+  display: flex;
+  gap: 24px;
+  height: calc(100vh - 280px);
+  margin-top: 12px;
+}
+
+/* 左侧意图树面板 */
+.intent-tree-panel {
+  flex: 1;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 300px;
+}
+
+/* 右侧节点详情面板 */
+.node-detail-panel {
+  flex: 1;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 300px;
+}
+
+/* 面板头部 */
+.panel-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #f0f0f0;
+  background-color: #fafafa;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  flex: 1;
+}
+
+.panel-subtitle {
+  font-size: 12px;
+  color: #999;
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 面板内容 */
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* 加载状态 */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  color: #666;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #1890ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 树节点样式 */
+.tree-node {
+  margin-bottom: 4px;
+}
+
+.node-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 2px;
+  position: relative;
+}
+
+.node-item:hover {
+  background: #f5f7fa;
+}
+
+.node-item.selected {
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+}
+
+.node-toggle {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  font-size: 10px;
+  color: #666;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.3s;
+}
+
+.node-toggle:hover {
+  color: #1890ff;
+}
+
+.node-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.node-badges {
+  display: flex;
+  gap: 4px;
+  margin-left: 4px;
+  align-items: center;
+}
+
+.badge {
+  padding: 1px 6px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 500;
+  background: #f0f0ff;
+  color: #667eea;
+  border: 1px solid #e0e0ff;
+}
+
+.level-badge {
+  background: #f0f0ff;
+  color: #667eea;
+  border: 1px solid #e0e0ff;
+}
+
+.kind-badge {
+  background: #f0f0ff;
+  color: #667eea;
+  border: 1px solid #e0e0ff;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-enabled {
+  background: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.status-disabled {
+  background: #fffbe6;
+  color: #faad14;
+  border: 1px solid #ffe58f;
+}
+
+/* 子节点缩进 */
+.node-children {
+  margin-left: 24px;
+  margin-top: 4px;
+}
+
+/* 节点详情 */
+.node-details {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.node-header-section {
+  padding-bottom: 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.node-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 12px 0;
+}
+
+.node-meta {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.node-code {
+  font-size: 14px;
+  color: #999;
+  font-family: monospace;
+  background: #f8f9fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* 节点操作 - 已移动到面板头部 */
+.action-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 示例问题标签样式 */
+.example-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.example-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #f0f0ff;
+  color: #667eea;
+  border: 1px solid #e0e0ff;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.example-tag:hover {
+  background: #e6e6ff;
+  border-color: #667eea;
+}
+
+.tag-remove {
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.tag-remove:hover {
+  background: #667eea;
+  color: white;
+}
+
+.example-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.example-input-field {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.example-input-field:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+.hidden-textarea {
+  display: none;
+}
+
+/* 详细信息区域 */
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.info-value {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.description-content {
+  font-size: 14px;
+  color: #333;
+  line-height: 1.5;
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.examples-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.example-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.example-text {
+  flex: 1;
+  font-size: 14px;
+  color: #333;
+}
+
+.prompt-section {
+  margin-top: 8px;
+}
+
+.prompt-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 120px;
+  background: #f8f9fa;
+  color: #333;
+  font-family: monospace;
+}
+
+.prompt-textarea:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  color: #999;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.empty-state p {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+}
+
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .intent-management-container {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .intent-tree-panel {
+    flex: none;
+    height: 400px;
+  }
+  
+  .node-detail-panel {
+    flex: none;
+    min-height: 500px;
+  }
+}
+
+@media (max-width: 768px) {
+  .intent-tree-panel {
+    flex: 0 0 280px;
+  }
+  
+  .panel-header {
+    padding: 16px 20px;
+  }
+  
+  .panel-content {
+    padding: 16px;
+  }
+  
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+
+
+
+
+
+
+
 </style>
