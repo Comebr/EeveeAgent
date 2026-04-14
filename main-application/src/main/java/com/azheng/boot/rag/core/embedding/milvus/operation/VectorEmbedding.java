@@ -1,6 +1,6 @@
-package com.azheng.boot.rag.embedding.milvus.operation;
+package com.azheng.boot.rag.core.embedding.milvus.operation;
 
-import com.azheng.boot.rag.embedding.milvus.config.MilvusClientConfig;
+import com.azheng.boot.rag.core.embedding.milvus.config.MilvusClientConfig;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import dev.langchain4j.data.embedding.Embedding;
@@ -28,7 +28,7 @@ public class VectorEmbedding {
     private EmbeddingModel embeddingModel;
 
     @Resource
-    private MilvusClientConfig milvusClientConfig;
+    private MilvusClientV2 milvusClientV2;
 
 
 
@@ -55,8 +55,6 @@ public class VectorEmbedding {
 
 
         // 链接Milvus客户端操作
-        MilvusClientV2 milvusClientV2 = milvusClientConfig.connect();
-
         /// 2.插入实体
         InsertResp insert = milvusClientV2.insert(InsertReq
                                             .builder()

@@ -1,4 +1,4 @@
-package com.azheng.boot.rag.embedding.milvus.config;
+package com.azheng.boot.rag.core.embedding.milvus.config;
 
 import io.milvus.v2.client.ConnectConfig;
 import io.milvus.v2.client.MilvusClientV2;

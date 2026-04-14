@@ -1,9 +1,7 @@
-package com.azheng.boot.rag.embedding.milvus.operation;
+package com.azheng.boot.rag.core.embedding.milvus.operation;
 
 import cn.hutool.core.lang.Assert;
-import cn.hutool.json.JSON;
-import cn.hutool.json.JSONUtil;
-import com.azheng.boot.rag.embedding.milvus.config.MilvusClientConfig;
+import com.azheng.boot.rag.core.embedding.milvus.config.MilvusClientConfig;
 import com.azheng.framework.exception.ClientException;
 import com.azheng.framework.exception.ServiceException;
 import com.google.gson.Gson;
@@ -19,10 +17,7 @@ import io.milvus.v2.service.collection.request.CreateCollectionReq;
 import io.milvus.v2.service.collection.request.GetLoadStateReq;
 import io.milvus.v2.service.database.request.CreateDatabaseReq;
 import io.milvus.v2.service.vector.request.DeleteReq;
-import io.milvus.v2.service.vector.request.InsertReq;
-import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.request.UpsertReq;
-import io.milvus.v2.service.vector.response.DeleteResp;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,7 +38,7 @@ public class MilvusOperations {
     private Integer dimension;
 
     @Resource
-    private MilvusClientConfig milvusClientConfig;
+    private MilvusClientV2 milvusClientV2;
 
     @Resource
     private EmbeddingModel embeddingModel;
@@ -54,8 +49,6 @@ public class MilvusOperations {
      */
     public void createDataBase(String dbName) {
         Assert.notNull(dbName,()->new ServiceException("Milvus数据库名称不能为空"));
-        //获取MilvusClientV2
-        MilvusClientV2 milvusClientV2 = milvusClientConfig.connect();
 
         // 校验数据库名称是否重复
         List<String> databaseNames = milvusClientV2.listDatabases().getDatabaseNames();
@@ -83,15 +76,13 @@ public class MilvusOperations {
      */
     public boolean createChunkCollection(String collectionName) {
         Assert.notNull(collectionName,()->new ServiceException("Milvus<UNK>"));
-        // 0.获取客户端
-        MilvusClientV2 milvusClient = milvusClientConfig.connect();
 
         // 1.校验collectionName唯一性
-        ensureCollectionNotExist(collectionName, milvusClient);
+        ensureCollectionNotExist(collectionName, milvusClientV2);
 
 
         // 2.创建Schema
-        CreateCollectionReq.CollectionSchema schema = milvusClient.createSchema();
+        CreateCollectionReq.CollectionSchema schema = milvusClientV2.createSchema();
         // id
         schema.addField(AddFieldReq
                         .builder()
@@ -138,10 +129,10 @@ public class MilvusOperations {
 
         try {
             // 5.创建Collection
-            milvusClient.createCollection(collectionReq);
+            milvusClientV2.createCollection(collectionReq);
 
             // 6.返回加载状态
-            Boolean loadState = milvusClient.getLoadState(GetLoadStateReq.builder().collectionName(collectionName).build());
+            Boolean loadState = milvusClientV2.getLoadState(GetLoadStateReq.builder().collectionName(collectionName).build());
             return loadState;
         } catch (Exception e) {
             log.error("创建Collection失败，请检查Milvus客户端");
@@ -153,8 +144,7 @@ public class MilvusOperations {
      * 删除记录
      */
     public void deleteEntity(Long milvusId,String collectionName) {
-        MilvusClientV2 connect = milvusClientConfig.connect();
-        connect.delete(DeleteReq
+        milvusClientV2.delete(DeleteReq
                 .builder()
                 .collectionName(collectionName)
                 .ids(Arrays.asList(milvusId))
@@ -185,10 +175,9 @@ public class MilvusOperations {
         data.add(jsonObject);
 
 
-        MilvusClientV2 connect = milvusClientConfig.connect();
 
         /// 2.修改
-        connect.upsert(UpsertReq.builder()
+        milvusClientV2.upsert(UpsertReq.builder()
                                 .collectionName(collectionName)
                                 .data(data)
                                 .build()
