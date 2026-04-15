@@ -409,6 +409,15 @@ lc4j提供了5个核心组件：
 
 
 
+**参数列表：**
+
+| 链式方法          | 对应旧参数            | 核心作用                |
+| ----------------- | --------------------- | ----------------------- |
+| `scoringModel()`  | -（新增核心配置）     | 指定重排序打分模型      |
+| `minScore()`      | `similarityThreshold` | 过滤低相关性 Chunk      |
+| `maxResults()`    | `topN`                | 限制最大返回 Chunk 数量 |
+| `querySelector()` | -（查询定位）         | 提取 / 定位用户原始提问 |
+
 
 
 ### 5.ContentInjector接口（拼接提示词）
@@ -784,6 +793,50 @@ PromptContext
 
 ## 意图识别
 
+**核心点：基础意图识别构建、意图识别识别流程resolve**
+
+流程：
+
+resolve（classifyIntents）——》capTotalIntents（collectAllCandidates、selectTopIntentPerSubQuestion、selectAdditionalIntents）—— 》rebuildSubIntents
+
+****
+
+
+
+前置：封装完整的用户问题重写结果
+
+开始意图识别：
+
+resolve：
+
+1.校验结果是否包含子问题？子问题：精简原问题
+
+2.采用专属线程池异步进行意图节点打分筛选：
+
+​	得到List<NodeScore>——》封装成对象(子问题+对应节点打分结果)
+
+3.得到子问题与其意图候选列表
+
+capTotalIntents：
+
+1.计算总意图数
+
+2.若未超限，步出
+
+3.超限：
+
+- 步骤1：收集所有意图，按子问题索引分组，降序排序
+- 步骤2：每个子问题保留最高分意图，截取第一个
+- 步骤3：计算剩余配额（问题数<最大意图数就会产生剩余）
+- 步骤4：从剩余候选中按分数选择
+- 步骤5：合并并重建结果
+
+
+
+
+
+rebuildSubIntents：这一步的核心就是按照问题索引去重构出最终的意图识别结果，也就是子问题字符串+意图节点
+
 #### 1.数据表设计
 
 核心：子点标识、所属父节点标识、结点类型、collection_name、top_k
@@ -971,22 +1024,314 @@ public enum IntentKind {
 
 #### 3.数据模型类
 
+## 召回
 
-
-
-
-
-
-
-
-## 多路召回
+检索阶段要根据
 
 
 
 ## rerank重排
+
+### LangChain4j-Rerank
+
+官方提供了两种实现重排的策略
+
+1.基于RRF算法
+
+```java
+    /**
+     * 基于 RRF（互惠排名融合）算法实现多源结果融合（默认实现）
+     * @param rerankRequestMap
+     * @return
+     */
+    public List<Content> contentAggregatorWithRRF(Map<Query, Collection<List<Content>>> rerankRequestMap){
+        DefaultContentAggregator defaultContentAggregator = new DefaultContentAggregator();
+        List<Content> aggregate = defaultContentAggregator.aggregate(rerankRequestMap);
+        return aggregate;
+    }
+
+```
+
+
+
+2.使用rerank模型进行重排
+
+```java
+/**
+     * 高精度语义重排
+     * @param rerankRequestMap
+     * @return
+     */
+    public List<Content> contentAggregatorWithReRank(Map<Query, Collection<List<Content>>> rerankRequestMap){
+        /**
+         * 参数列表：
+         * .scoringModel()    // 1. 重排序打分模型（核心）
+         * .minScore()        // 2. 最小分数阈值（过滤）
+         * .maxResults()      // 3. 最大返回结果数（截断）TopN
+         * .querySelector()   // 4. 查询提取器（定位用户问题）
+         */
+        ReRankingContentAggregator reRankingContentAggregator = ReRankingContentAggregator
+                .builder()
+                .scoringModel()
+                .minScore()
+                .maxResults()
+                .querySelector()
+                .build();
+        List<Content> aggregate = reRankingContentAggregator.aggregate(rerankRequestMap);
+        return aggregate;
+    }
+```
+
+
+
+LangChain4j 的核心设计理念 ——**提供抽象接口，鼓励用户根据自身需求灵活实现**。方便适应生态多样性、解耦。
+
+![image-20260415104659794](./../../../images/image-20260415104659794.png)
+
+
+
+根据源码可以看出，我们只需实现ScoringModel接口，并自定义继承的方法便可做适配
+
+### DashScope-Rerank
+
+本项目使用Qwen-Rerank来实现
+
+#### 依赖
+
+```xml
+        <!-- 3. Dashscope社区依赖接入 -->
+<dependency>
+      <groupId>dev.langchain4j</groupId>
+      <artifactId>langchain4j-community-dashscope-spring-bootstarter</artifactId>
+</dependency>
+```
+
+2.22.6版本，百炼官方提供了如下实体
+
+![image-20260415110309144](./../../../images/image-20260415110309144.png)
+
+#### TextRerank：
+
+**1.成员变量：**
+
+**`log`**：SLF4J 日志记录器，用于记录运行时日志。
+
+**`syncApi`**：`SynchronizeHalfDuplexApi<TextReRankParam>` 类型，负责底层的同步半双工通信（请求 - 响应模式）。
+
+**`serviceOption`**：`ApiServiceOption` 类型，通过 `defaultApiServiceOption()` 初始化，定义了服务调用的核心配置（协议、HTTP 方法、任务类型等）。
+
+**2. `call(TextReRankParam param)`**
+
+核心调用方法：
+
+- 先验证 `param` 参数合法性（`param.validate()`）。
+- 强制设置为**非流式模式**（`SSE=false`，`StreamingMode.NONE`）。
+- 通过 `syncApi.call(param)` 发起请求，再将原始响应转换为 `TextReRankResult` 类型返回。
+
+
+
+
+
+#### TextRerankParam
+
+负责封装调用 `TextReRank` 时所需的所有输入数据，并完成参数校验、请求体构建等工作。
+
+| 字段名            | 类型           | 作用说明                                                     |
+| ----------------- | -------------- | ------------------------------------------------------------ |
+| `query`           | `String`       | **必填**。重排序的查询文本，最大长度 4000 tokens。           |
+| `documents`       | `List<String>` | **必填**。待重排序的候选文档列表，最多 500 条。`@Singular` 注解通常用于 Builder 模式，支持逐个添加文档。 |
+| `topN`            | `Integer`      | 可选。指定返回的 top-K 文档数量。若不填或超过文档总数，返回全部文档。 |
+| `returnDocuments` | `Boolean`      | 可选。是否在结果中返回原始文档内容，默认为 `false`。         |
+| `instruct`        | `String`       | 可选。重排序的指令文本，用于自定义重排序的逻辑导向。         |
+
+#### **TextReRankOutput**
+
+文本重排序服务的**响应结果类**
+
+| 字段    | 类型                | 含义                                           |
+| ------- | ------------------- | ---------------------------------------------- |
+| results | `List<Result>` 类型 | 存储所有重排序后的结果列表，默认按分数降序排列 |
+
+**内部类1.`Result`（重排序结果项）**
+
+| 字段           | 类型     | 含义                                                         |
+| -------------- | -------- | ------------------------------------------------------------ |
+| index          | Interger | 原始文档在输入列表中的索引位置                               |
+| relevanceScore | Double   | 相关性得分                                                   |
+| document       | Document | 仅当请求参数 `returnDocuments` 设为 `true` 时，该字段才会有值，包含原始文档的内容。 |
+
+**内部类2.Document（文档内容）**
+
+| 字段 | 类型   | 含义                       |
+| ---- | ------ | -------------------------- |
+| text | String | 存储候选文档的原始文本内容 |
+
+
+
+#### TextReRankResult（最终响应结果封装类）
+
+
+
+| 字段名       | 类型               | 作用说明                                                     |
+| ------------ | ------------------ | ------------------------------------------------------------ |
+| `requestId`  | `String`           | 通过 `@SerializedName("request_id")` 映射 JSON 字段，唯一标识本次 API 请求，用于问题排查。 |
+| `usage`      | `TextReRankUsage`  | 本次请求的 Token 用量统计（如输入 Token 数、总 Token 数等）。 |
+| `output`     | `TextReRankOutput` | 重排序的核心业务结果，包含排序后的文档列表、相关性得分等（即上一节解析的类）。 |
+| `statusCode` | `Integer`          | 通过 `@SerializedName("status_code")` 映射 JSON 字段，HTTP 状态码（如 200 表示成功）。 |
+| `code`       | `String`           | 业务状态码（如 "Success" 表示成功，错误时返回具体错误码）。  |
+| `message`    | `String`           | 业务状态描述（成功时通常为空，错误时返回错误详情）。         |
+
+
+
+#### TextReRankUsage（Token 用量统计类）
+
+| 字段名        | 类型      | 作用说明                                                     |
+| ------------- | --------- | ------------------------------------------------------------ |
+| `totalTokens` | `Integer` | 通过 `@SerializedName("total_tokens")` 映射 JSON 字段，表示本次请求消耗的 **总 Token 数**（包含 `query` 和所有 `documents` 的 Token 总和）。 |
+
+
+
+#### 实战
+
+
+
+
+
+# 检索
+
+当前流程分析：
+
+问题重写——子问题进行意图识别——可能会存在多种意图（目前就两个：系统问题、知识库检索）
+
+——执行检索流程（RetrievalContext）
+
+既然是有多钟意图，那我们左检索时就要分别出来，系统意图你就去走系统检索通道，KB意图就进行KB检索通道处理，最后汇总起来，得到最终的检索结果
+
+——根据得到的结果进行提示词模版封装（PromptContext）
+
+——封装好的提示词喂给大模型 
+
+——输出内容
+
+PromptContext
+
+——RetrievalContext
+
+​	——ReCallContext
+
+​	——ReRankContext
+
+至于那些清理、格式化先不用去管，当完整流程打通之后，再进行微调
+
+retrieve(buildSubQuestionContext)	
 
 
 
 
 
 ## 生成
+
+
+
+整合全流程到聊天服务
+
+1.对用户提问进行重写
+
+
+
+
+
+
+
+
+
+
+
+## RAGent项目详细RAG流程
+### 1. 用户提问阶段
+- 输入 ：用户原始问题
+- 处理 ：接收用户输入，生成会话ID和任务ID
+### 2. 记忆加载阶段
+- 组件 ： ConversationMemoryService
+- 功能 ：加载历史对话记录，支持多轮对话上下文
+- 代码 ： memoryService.loadAndAppend(conversationId, userId, ChatMessage.user(question))
+### 3. 查询改写阶段
+- 组件 ： QueryRewriteService
+- 功能 ：
+  - 将自然语言问题改写为适合检索的简洁查询
+  - 支持多问句拆分
+  - 结合对话历史进行指代消解
+- 代码 ： queryRewriteService.rewriteWithSplit(question, history)
+- 输出 ： RewriteResult 包含改写后的问题和子问题列表
+### 4. 意图识别阶段
+- 组件 ： IntentResolver
+- 功能 ：
+  - 对每个子问题进行意图分类
+  - 并发处理多个子问题
+  - 过滤低分意图（分数 < 0.35）
+  - 限制最大意图数量（最多3个）
+- 代码 ： intentResolver.resolve(rewriteResult)
+- 输出 ： List<SubQuestionIntent> 包含每个子问题及其相关意图
+### 5. 歧义引导阶段
+- 组件 ： IntentGuidanceService
+- 功能 ：
+  - 检测用户问题是否存在歧义
+  - 当意图识别结果包含多个相似选项时，生成引导式问答
+  - 提示用户明确具体需求
+- 代码 ： guidanceService.detectAmbiguity(rewriteResult.rewrittenQuestion(), subIntents)
+- 输出 ： GuidanceDecision 决定是否需要引导用户
+### 6. 系统意图判断阶段
+- 组件 ： IntentResolver
+- 功能 ：
+  - 判断是否所有意图都是系统意图（SYSTEM类型）
+  - 如果是系统意图，使用自定义提示词直接回答
+  - 跳过检索流程
+- 代码 ： intentResolver.isSystemOnly(si.nodeScores())
+### 7. 检索阶段
+- 组件 ： RetrievalEngine
+- 功能 ：
+  - MCP工具调用 ：根据MCP意图调用相应工具获取动态数据
+  - 多通道检索 ：支持意图导向检索和全局检索
+  - 并发检索 ：多个检索通道并发执行
+  - 后处理 ：去重、重排序等 7.1 MCP工具调用
+- 组件 ： MCPToolExecutor
+- 功能 ：
+  - 从用户问题中提取MCP工具参数
+  - 调用相应的MCP工具（如数据库查询、API调用等）
+  - 获取动态数据作为MCP上下文 7.2 多通道检索
+- 组件 ： MultiChannelRetrievalEngine
+- 检索通道 ：
+  - 意图导向检索 ：根据意图节点定向检索特定知识库
+  - 全局检索 ：在所有知识库中进行全局搜索
+- 并发策略 ：多个检索通道并发执行，提高检索效率 7.3 后处理
+- 去重 ： DeduplicationPostProcessor 去除重复的检索结果
+- 重排序 ： RerankPostProcessor 使用Rerank模型对结果进行重新排序
+- 代码 ： retrievalEngine.retrieve(subIntents, DEFAULT_TOP_K)
+- 输出 ： RetrievalContext 包含MCP上下文、知识库上下文和分组的检索块
+### 8. 提示词组装阶段
+- 组件 ： RAGPromptService
+- 功能 ：
+  - 根据场景选择合适的提示词模板（KB_ONLY、MCP_ONLY、MIXED）
+  - 组装结构化消息序列
+  - 处理多子问题的显式编号
+  - 添加历史对话记录
+- 代码 ： promptBuilder.buildStructuredMessages(context, history, question, subQuestions)
+- 输出 ： List<ChatMessage> 完整的消息序列
+### 9. 流式输出阶段
+- 组件 ： LLMService
+- 功能 ：
+  - 调用大模型生成回答
+  - 支持流式输出
+  - 支持任务取消
+- 代码 ： llmService.streamChat(request, callback)
+- 输出 ：通过SSE向客户端流式返回回答
+
+
+
+
+
+
+
+当前执行链路：
+
+reslove——》classifyIntents——》DefaultIntentClassifier.classifyTargets——》DefaultIntentClassifier.buildIntentPromptTemplate——》PromptTemplateLoader.render——》
