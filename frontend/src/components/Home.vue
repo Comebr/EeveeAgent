@@ -10,7 +10,7 @@ const router = useRouter()
 const userInfo = ref(null)
 const showUserMenu = ref(false)
 const sidebarCollapsed = ref(false)
-const sidebarAutoHidden = ref(true) // 默认隐藏
+const sidebarAutoHidden = ref(false) // 默认展开
 const mouseNearSidebar = ref(false)
 
 // 消息提示
