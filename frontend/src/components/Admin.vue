@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, reactive, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import UserManagement from './user/UserManagement.vue'
@@ -28,10 +28,15 @@ const pagination = reactive({
 
 // 弹窗控制
 const showCreateModal = ref(false)
+const showIntentCreateModal = ref(false)
 const showEditModal = ref(false)
+const showIntentEditModal = ref(false)
 const showDeleteConfirm = ref(false)
 const editingItem = ref({})
 const itemToDelete = ref(null)
+
+// 父节点选择状态
+const parentSelectOpen = ref(false)
 
 // 文档管理
 const activeTab = ref('knowledge') // knowledge 或 documents 或 chunks
@@ -904,7 +909,7 @@ const intentCreateForm = ref({
   intentCode: '',
   name: '',
   level: 0, // 0=DOMAIN,1=CATEGORY,2=INTENT
-  parentCode: '',
+  parentCode: '', // 默认选择ROOT，ROOT对应的value是空字符串
   description: '',
   examples: [],
   examplesText: '',
@@ -1001,6 +1006,36 @@ const expandAllNodes = (nodes) => {
   })
 }
 
+// 生成父节点选项列表（带完整路径）
+const generateParentOptions = (nodes, prefix = '') => {
+  let options = []
+  
+  // 添加ROOT选项
+  if (prefix === '') {
+    options.push({ label: 'ROOT', value: '' })
+  }
+  
+  nodes.forEach(node => {
+    // 生成当前节点的显示标签（包含完整路径）
+    const label = prefix ? `${prefix} > ${node.name}` : node.name
+    // 添加当前节点作为选项
+    options.push({ label, value: node.intentCode })
+    
+    // 递归处理子节点
+    if (node.children && node.children.length > 0) {
+      const childOptions = generateParentOptions(node.children, label)
+      options = [...options, ...childOptions]
+    }
+  })
+  
+  return options
+}
+
+// 计算属性：父节点选项列表
+const parentOptions = computed(() => {
+  return generateParentOptions(intentTree.value)
+})
+
 // 切换节点展开/收起状态
 const toggleNode = (node) => {
   const expanded = expandedNodes.value
@@ -1093,16 +1128,17 @@ const handleIntentCreate = async () => {
       intentCreateForm.value.examples = []
     }
     
-    // 将布尔值转换为数字
+    // 将布尔值转换为数字，并处理parentCode
     const formData = {
       ...intentCreateForm.value,
+      parentCode: intentCreateForm.value.parentCode === '' ? null : intentCreateForm.value.parentCode,
       enabled: intentCreateForm.value.enabled ? 1 : 0
     }
     
     const response = await axios.post('/intent-tree/createNode', formData)
     if (response.data.code === '0') {
       showToast('创建成功', 'success')
-      showCreateModal.value = false
+      showIntentCreateModal.value = false
       loadIntentTree()
       resetCreateForm()
     } else {
@@ -1133,7 +1169,7 @@ const handleIntentUpdate = async () => {
     const response = await axios.put(`/intent-tree/mkdir/${intentEditForm.value.id}`, formData)
     if (response.data.code === '0') {
       showToast('更新成功', 'success')
-      showEditModal.value = false
+      showIntentEditModal.value = false
       loadIntentTree()
     } else {
       showToast(response.data.message || '更新失败', 'error')
@@ -1171,7 +1207,7 @@ const openCreateModal = () => {
     intentCreateForm.value.parentCode = selectedNode.value.intentCode
     intentCreateForm.value.level = selectedNode.value.level + 1
   }
-  showCreateModal.value = true
+  showIntentCreateModal.value = true
 }
 
 // 打开编辑节点模态框
@@ -1198,7 +1234,7 @@ const openEditModal = () => {
   // 同步标签
   syncEditExampleTags()
   
-  showEditModal.value = true
+  showIntentEditModal.value = true
 }
 
 // 重置创建表单
@@ -1257,6 +1293,27 @@ const refreshIntentTree = () => {
   loadIntentTree()
 }
 
+// 切换父节点选择下拉框
+const toggleParentSelect = () => {
+  parentSelectOpen.value = !parentSelectOpen.value
+}
+
+// 选择父节点选项
+const selectParentOption = (value) => {
+  intentCreateForm.value.parentCode = value
+  parentSelectOpen.value = false
+}
+
+// 获取父节点选项的标签
+const getParentOptionLabel = (value) => {
+  // 当value为空字符串时，直接返回'ROOT'
+  if (value === '') {
+    return 'ROOT'
+  }
+  const option = parentOptions.value.find(opt => opt.value === value)
+  return option ? option.label : '请选择父节点'
+}
+
 // 初始化意图树
 onMounted(() => {
   // 从本地存储获取用户信息
@@ -1268,7 +1325,24 @@ onMounted(() => {
   fetchKnowledgeList()
   // 加载意图树
   loadIntentTree()
+  
+  // 添加全局点击事件监听器，用于关闭父节点选择下拉框
+  document.addEventListener('click', handleClickOutside)
 })
+
+// 组件卸载时移除事件监听器
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+
+// 处理点击外部关闭下拉框
+const handleClickOutside = (event) => {
+  // 检查点击是否发生在自定义选择框外部
+  const customSelect = document.querySelector('.custom-select')
+  if (customSelect && !customSelect.contains(event.target)) {
+    parentSelectOpen.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -2217,6 +2291,14 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.form-row {
+  margin-bottom: 16px;
+}
+
+.form-item.full-width {
+  width: 100%;
+}
+
 .form-section {
   margin-bottom: 16px;
   border: 1px solid #f0f0f0;
@@ -2333,6 +2415,314 @@ onMounted(() => {
   font-weight: 400;
   color: #666;
   margin-left: 8px;
+}
+
+/* 表单样式 */
+.form-item {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.required {
+  color: #ff4d4f;
+}
+
+.form-input,
+.form-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.3s;
+  box-sizing: border-box;
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+/* 可滚动选择框样式 */
+.select-container {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.scrollable-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+  cursor: pointer;
+  width: 100%;
+  /* 确保下拉菜单在选项过多时滚动 */
+  /* 注意：浏览器会自动处理下拉菜单的滚动 */
+}
+
+/* 为下拉选项添加滚动效果 */
+.scrollable-select option {
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+/* 美化下拉箭头 */
+.scrollable-select::-ms-expand {
+  display: none;
+}
+
+/* 自定义下拉选择框样式 */
+.custom-select {
+  position: relative;
+  width: 100%;
+  cursor: pointer;
+}
+
+.custom-select-selected {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background-color: #ffffff;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.custom-select-selected:hover {
+  border-color: #1890ff;
+}
+
+.custom-select-selected:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.select-arrow {
+  font-size: 12px;
+  color: #666;
+  transition: transform 0.3s;
+}
+
+.custom-select-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #d9d9d9;
+  border-radius: 0 0 4px 4px;
+  background-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  margin-top: -1px;
+}
+
+.custom-select-option {
+  padding: 8px 12px;
+  font-size: 14px;
+  color: #333;
+  transition: background-color 0.3s;
+}
+
+.custom-select-option:hover {
+  background-color: #f5f7fa;
+}
+
+.custom-select-option.selected {
+  background-color: #e6f7ff;
+  color: #1890ff;
+}
+
+/* 自定义下拉菜单滚动条样式 */
+.custom-select-options::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-select-options::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.custom-select-options::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.custom-select-options::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+  transition: all 0.3s;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+/* 开关样式 */
+.form-switch {
+  display: inline-flex;
+  align-items: center;
+}
+
+.form-switch input[type="checkbox"] {
+  display: none;
+}
+
+.switch-label {
+  display: block;
+  width: 44px;
+  height: 24px;
+  background-color: #d9d9d9;
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.switch-label::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background-color: white;
+  border-radius: 50%;
+  transition: all 0.3s;
+}
+
+.form-switch input[type="checkbox"]:checked + .switch-label {
+  background-color: #1890ff;
+}
+
+.form-switch input[type="checkbox"]:checked + .switch-label::after {
+  transform: translateX(20px);
+}
+
+/* 按钮样式 */
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-primary {
+  background-color: #1890ff;
+  color: white;
+  border-color: #1890ff;
+}
+
+.btn-primary:hover {
+  background-color: #40a9ff;
+  border-color: #40a9ff;
+}
+
+.btn-secondary {
+  background-color: white;
+  color: #333;
+  border-color: #d9d9d9;
+}
+
+.btn-secondary:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* 示例问题样式 */
+.example-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.example-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background-color: #f0f0f0;
+  border-radius: 12px;
+  font-size: 12px;
+  color: #666;
+  border: 1px solid #d9d9d9;
+}
+
+.tag-remove {
+  cursor: pointer;
+  color: #999;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tag-remove:hover {
+  color: #ff4d4f;
+}
+
+.example-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.example-input-field {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.example-input-field:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.hidden-textarea {
+  display: none;
 }
 </style>
 
@@ -2775,64 +3165,97 @@ onMounted(() => {
           </div>
           
           <!-- 新建节点模态框 -->
-          <div v-if="showCreateModal" class="modal-overlay">
+          <div v-if="showIntentCreateModal" class="modal-overlay">
             <div class="modal create-modal">
               <div class="modal-header">
                 <h3 class="modal-title">新建意图节点</h3>
-                <BaseButton type="secondary" size="small" @click="showCreateModal = false" class="close-button">&times;</BaseButton>
+                <BaseButton type="secondary" size="small" @click="showIntentCreateModal = false" class="close-button">&times;</BaseButton>
               </div>
               <ScrollableContainer>
                 <div class="modal-body">
                   <p class="modal-subtitle">配置意图节点的层级、类型与描述信息</p>
-                  <BaseForm @submit="handleIntentCreate" :show-actions="false">
+                  <form @submit.prevent="handleIntentCreate">
                     <div class="form-grid">
-                      <FormField 
-                        label="节点名称" 
-                        name="name"
-                        v-model="intentCreateForm.name" 
-                        placeholder="例如：OA系统" 
-                        :required="true"
-                        type="text"
-                      />
-                      <FormField 
-                        label="意图标识" 
-                        name="intentCode"
-                        v-model="intentCreateForm.intentCode" 
-                        placeholder="例如：biz-oa" 
-                        type="text"
-                      />
-                      <FormField 
-                        label="层级" 
-                        name="level"
-                        v-model="intentCreateForm.level" 
-                        :required="true"
-                        type="select"
-                        :options="levelOptions"
-                      />
-                      <FormField 
-                        label="类型" 
-                        name="kind"
-                        v-model="intentCreateForm.kind" 
-                        :required="true"
-                        type="select"
-                        :options="kindOptions"
-                      />
-                      <FormField 
-                        label="父节点" 
-                        name="parentCode"
-                        v-model="intentCreateForm.parentCode" 
-                        type="select"
-                        :options="[{ label: 'ROOT', value: '' }]"
-                      />
-                      <FormField 
-                        label="知识库" 
-                        name="kbId"
-                        v-model="intentCreateForm.kbId" 
-                        type="select"
-                        :options="[]"
-                        :show-empty-option="true"
-                        empty-option-text="请选择知识库"
-                      />
+                      <div class="form-item">
+                        <label class="form-label">节点名称 <span class="required">*</span></label>
+                        <input 
+                          type="text" 
+                          v-model="intentCreateForm.name" 
+                          placeholder="例如：OA系统" 
+                          class="form-input"
+                          required
+                        />
+                      </div>
+                      <div class="form-item">
+                        <label class="form-label">意图标识</label>
+                        <input 
+                          type="text" 
+                          v-model="intentCreateForm.intentCode" 
+                          placeholder="例如：biz-oa" 
+                          class="form-input"
+                        />
+                      </div>
+                      <div class="form-item">
+                        <label class="form-label">层级 <span class="required">*</span></label>
+                        <select 
+                          v-model="intentCreateForm.level" 
+                          class="form-select"
+                          required
+                        >
+                          <option v-for="option in levelOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                          </option>
+                        </select>
+                      </div>
+                      <div class="form-item">
+                        <label class="form-label">类型 <span class="required">*</span></label>
+                        <select 
+                          v-model="intentCreateForm.kind" 
+                          class="form-select"
+                          required
+                        >
+                          <option v-for="option in kindOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <!-- 父节点 -->
+                    <div class="form-row">
+                      <div class="form-item full-width">
+                        <label class="form-label">父节点</label>
+                        <div class="custom-select" @click="toggleParentSelect">
+                          <div class="custom-select-selected">
+                            {{ getParentOptionLabel(intentCreateForm.parentCode) }}
+                            <span class="select-arrow">{{ parentSelectOpen ? '▼' : '▶' }}</span>
+                          </div>
+                          <div v-if="parentSelectOpen" class="custom-select-options">
+                            <div 
+                              v-for="option in parentOptions" 
+                              :key="option.value"
+                              class="custom-select-option"
+                              :class="{ selected: intentCreateForm.parentCode === option.value }"
+                              @click="selectParentOption(option.value)"
+                            >
+                              {{ option.label }}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- 知识库 -->
+                    <div class="form-row">
+                      <div class="form-item full-width">
+                        <label class="form-label">知识库</label>
+                        <select 
+                          v-model="intentCreateForm.kbId" 
+                          class="form-select"
+                        >
+                          <option value="">请选择知识库</option>
+                        </select>
+                      </div>
                     </div>
                     
                     <!-- 描述与示例 -->
@@ -2842,18 +3265,17 @@ onMounted(() => {
                         <span class="section-toggle">{{ descriptionExpanded ? '▼' : '▶' }}</span>
                       </div>
                       <div v-if="descriptionExpanded" class="section-content">
-                        <FormField 
-                          label="描述" 
-                          name="description"
-                          v-model="intentCreateForm.description" 
-                          placeholder="节点的语义说明与说明场景" 
-                          type="textarea"
-                          :rows="4"
-                        />
-                        <FormField 
-                          label="示例问题"
-                          name="examplesText"
-                        >
+                        <div class="form-item">
+                          <label class="form-label">描述</label>
+                          <textarea 
+                            v-model="intentCreateForm.description" 
+                            placeholder="节点的语义说明与说明场景" 
+                            class="form-textarea"
+                            rows="4"
+                          ></textarea>
+                        </div>
+                        <div class="form-item">
+                          <label class="form-label">示例问题</label>
                           <!-- 标签显示区域 -->
                           <div class="example-tags">
                             <span 
@@ -2882,7 +3304,7 @@ onMounted(() => {
                             class="hidden-textarea"
                             @input="syncExampleTags"
                           ></textarea>
-                        </FormField>
+                        </div>
                       </div>
                     </div>
                     
@@ -2893,22 +3315,24 @@ onMounted(() => {
                         <span class="section-toggle">{{ promptExpanded ? '▼' : '▶' }}</span>
                       </div>
                       <div v-if="promptExpanded" class="section-content">
-                        <FormField 
-                          label="短规则片段（可选）" 
-                          name="promptSnippet"
-                          v-model="intentCreateForm.promptSnippet" 
-                          placeholder="多意图场景下的特定规则，会添加到整体提示词中" 
-                          type="textarea"
-                          :rows="3"
-                        />
-                        <FormField 
-                          label="Prompt模板（可选）" 
-                          name="promptTemplate"
-                          v-model="intentCreateForm.promptTemplate" 
-                          placeholder="场景用的完整Prompt模板，KB和MCP节点都可配置" 
-                          type="textarea"
-                          :rows="5"
-                        />
+                        <div class="form-item">
+                          <label class="form-label">短规则片段（可选）</label>
+                          <textarea 
+                            v-model="intentCreateForm.promptSnippet" 
+                            placeholder="多意图场景下的特定规则，会添加到整体提示词中" 
+                            class="form-textarea"
+                            rows="3"
+                          ></textarea>
+                        </div>
+                        <div class="form-item">
+                          <label class="form-label">Prompt模板（可选）</label>
+                          <textarea 
+                            v-model="intentCreateForm.promptTemplate" 
+                            placeholder="场景用的完整Prompt模板，KB和MCP节点都可配置" 
+                            class="form-textarea"
+                            rows="5"
+                          ></textarea>
+                        </div>
                       </div>
                     </div>
                     
@@ -2920,46 +3344,55 @@ onMounted(() => {
                       </div>
                       <div v-if="advancedExpanded" class="section-content">
                         <div class="form-grid">
-                          <FormField 
-                            label="节点 TopK（可选）" 
-                            name="topK"
-                            v-model="intentCreateForm.topK" 
-                            placeholder="留空则使用全局 TopK" 
-                            type="number"
-                          />
-                          <FormField 
-                            label="排序" 
-                            name="sortOrder"
-                            v-model="intentCreateForm.sortOrder" 
-                            placeholder="0" 
-                            type="number"
-                          />
+                          <div class="form-item">
+                            <label class="form-label">节点 TopK（可选）</label>
+                            <input 
+                              type="number" 
+                              v-model="intentCreateForm.topK" 
+                              placeholder="留空则使用全局 TopK" 
+                              class="form-input"
+                            />
+                          </div>
+                          <div class="form-item">
+                            <label class="form-label">排序</label>
+                            <input 
+                              type="number" 
+                              v-model="intentCreateForm.sortOrder" 
+                              placeholder="0" 
+                              class="form-input"
+                            />
+                          </div>
                         </div>
-                        <FormField 
-                          label="启用节点" 
-                          name="enabled"
-                          v-model="intentCreateForm.enabled" 
-                          type="switch"
-                        />
+                        <div class="form-item">
+                          <label class="form-label">启用节点</label>
+                          <div class="form-switch">
+                            <input 
+                              type="checkbox" 
+                              v-model="intentCreateForm.enabled" 
+                              id="enabled-switch"
+                            />
+                            <label for="enabled-switch" class="switch-label"></label>
+                          </div>
+                        </div>
                       </div>
                     </div>
                     
                     <div class="form-actions">
-                      <BaseButton type="secondary" @click="showCreateModal = false">取消</BaseButton>
+                      <BaseButton type="secondary" @click="showIntentCreateModal = false">取消</BaseButton>
                       <BaseButton type="primary" native-type="submit">创建</BaseButton>
                     </div>
-                  </BaseForm>
+                  </form>
                 </div>
               </ScrollableContainer>
             </div>
           </div>
           
           <!-- 编辑节点模态框 -->
-          <div v-if="showEditModal" class="modal-overlay">
+          <div v-if="showIntentEditModal" class="modal-overlay">
             <div class="modal">
               <div class="modal-header">
                 <h3 class="modal-title">编辑节点</h3>
-                <BaseButton type="secondary" size="small" @click="showEditModal = false" class="close-button">&times;</BaseButton>
+                <BaseButton type="secondary" size="small" @click="showIntentEditModal = false" class="close-button">&times;</BaseButton>
               </div>
               <ScrollableContainer>
                 <div class="modal-body">
@@ -2981,11 +3414,11 @@ onMounted(() => {
                       :options="levelOptions"
                     />
                     <FormField 
-                      label="父节点编码" 
+                      label="父节点" 
                       name="parentCode"
                       v-model="intentEditForm.parentCode" 
-                      placeholder="请输入父节点编码" 
-                      type="text"
+                      type="select"
+                      :options="parentOptions"
                     />
                     <FormField 
                       label="类型" 
@@ -3055,7 +3488,7 @@ onMounted(() => {
                       :rows="5"
                     />
                     <div class="form-actions">
-                      <BaseButton type="secondary" @click="showEditModal = false">取消</BaseButton>
+                      <BaseButton type="secondary" @click="showIntentEditModal = false">取消</BaseButton>
                       <BaseButton type="primary" native-type="submit">保存</BaseButton>
                     </div>
                   </BaseForm>
