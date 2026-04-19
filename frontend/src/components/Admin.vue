@@ -32,6 +32,7 @@ const showIntentCreateModal = ref(false)
 const showEditModal = ref(false)
 const showIntentEditModal = ref(false)
 const showDeleteConfirm = ref(false)
+const showIntentDeleteConfirm = ref(false)
 const editingItem = ref({})
 const itemToDelete = ref(null)
 
@@ -956,12 +957,23 @@ const newExample = ref('')
 
 // 类型选项
 const levelOptions = [
+  { label: 'DOMAIN-顶层领域', value: 0 },
+  { label: 'CATEGORY-业务分类', value: 1 },
+  { label: 'INTENT-具体意图', value: 2 }
+]
+
+const kindOptions = [
+  { label: 'KB-知识库检索', value: 0 },
+  { label: 'SYSTEM-系统交互', value: 1 }
+]
+// 类型标签
+const levelOptionsTag = [
   { label: 'DOMAIN', value: 0 },
   { label: 'CATEGORY', value: 1 },
   { label: 'INTENT', value: 2 }
 ]
 
-const kindOptions = [
+const kindOptionsTag = [
   { label: 'KB', value: 0 },
   { label: 'SYSTEM', value: 1 }
 ]
@@ -1068,7 +1080,19 @@ const removeExampleTag = (tag) => {
 // 同步标签和examplesText
 const syncExampleTags = () => {
   if (intentCreateForm.value.examplesText) {
-    exampleTags.value = intentCreateForm.value.examplesText.split('\n').filter(item => item.trim())
+    const examplesText = intentCreateForm.value.examplesText
+    try {
+      // 尝试解析JSON数组字符串
+      const parsed = JSON.parse(examplesText)
+      if (Array.isArray(parsed)) {
+        exampleTags.value = parsed.filter(item => item && item.trim())
+        return
+      }
+    } catch (e) {
+      // 如果不是JSON字符串，按换行符分割
+    }
+    // 按换行符分割
+    exampleTags.value = examplesText.split('\n').filter(item => item.trim())
   } else {
     exampleTags.value = []
   }
@@ -1128,10 +1152,11 @@ const handleIntentCreate = async () => {
       intentCreateForm.value.examples = []
     }
     
-    // 将布尔值转换为数字，并处理parentCode
+    // 将布尔值转换为数字，并处理parentCode和topK
     const formData = {
       ...intentCreateForm.value,
       parentCode: intentCreateForm.value.parentCode === '' ? null : intentCreateForm.value.parentCode,
+      topK: intentCreateForm.value.topK === '' ? null : intentCreateForm.value.topK,
       enabled: intentCreateForm.value.enabled ? 1 : 0
     }
     
@@ -1154,23 +1179,116 @@ const handleIntentCreate = async () => {
 const handleIntentUpdate = async () => {
   try {
     // 将examplesText转换为examples数组
-    if (intentEditForm.value.examplesText) {
-      intentEditForm.value.examples = intentEditForm.value.examplesText.split('\n').filter(item => item.trim())
+    if (intentCreateForm.value.examplesText) {
+      intentCreateForm.value.examples = intentCreateForm.value.examplesText.split('\n').filter(item => item.trim())
     } else {
-      intentEditForm.value.examples = []
+      intentCreateForm.value.examples = []
     }
     
-    // 将布尔值转换为数字
-    const formData = {
-      ...intentEditForm.value,
-      enabled: intentEditForm.value.enabled ? 1 : 0
+    // 准备更新数据
+    let formData = {
+      id: intentCreateForm.value.id,
+      topK: intentCreateForm.value.topK === '' ? null : intentCreateForm.value.topK,
+      enabled: intentCreateForm.value.enabled ? 1 : 0
     }
     
-    const response = await axios.put(`/intent-tree/mkdir/${intentEditForm.value.id}`, formData)
+    // 比较数据变化，只传递发生变化的字段
+    const changedFields = {}
+    
+    // 比较基本字段
+    if (intentCreateForm.value.name !== originalNodeData.value.name) {
+      changedFields.name = intentCreateForm.value.name
+    }
+    
+    if (intentCreateForm.value.description !== originalNodeData.value.description) {
+      changedFields.description = intentCreateForm.value.description
+    }
+    
+    // 比较examples
+    const currentExamples = intentCreateForm.value.examples
+    const originalExamples = originalNodeData.value.examples
+    let examplesChanged = false
+    
+    if (Array.isArray(currentExamples) && Array.isArray(originalExamples)) {
+      if (currentExamples.length !== originalExamples.length) {
+        examplesChanged = true
+      } else {
+        for (let i = 0; i < currentExamples.length; i++) {
+          if (currentExamples[i] !== originalExamples[i]) {
+            examplesChanged = true
+            break
+          }
+        }
+      }
+    } else if (typeof currentExamples === 'string' && typeof originalExamples === 'string') {
+      if (currentExamples !== originalExamples) {
+        examplesChanged = true
+      }
+    } else {
+      examplesChanged = true
+    }
+    
+    if (examplesChanged) {
+      changedFields.examples = currentExamples
+    }
+    
+    // 比较collectionName和kbId
+    if (intentCreateForm.value.collectionName !== originalNodeData.value.collectionName) {
+      changedFields.collectionName = intentCreateForm.value.collectionName
+      changedFields.kbId = intentCreateForm.value.kbId
+    }
+    
+    // 比较topK
+    if (formData.topK !== originalNodeData.value.topK) {
+      changedFields.topK = formData.topK
+    }
+    
+    // 比较kind
+    if (intentCreateForm.value.kind !== originalNodeData.value.kind) {
+      changedFields.kind = intentCreateForm.value.kind
+    }
+    
+    // 比较sortOrder
+    if (intentCreateForm.value.sortOrder !== originalNodeData.value.sortOrder) {
+      changedFields.sortOrder = intentCreateForm.value.sortOrder
+    }
+    
+    // 比较enabled
+    if (formData.enabled !== originalNodeData.value.enabled) {
+      changedFields.enabled = formData.enabled
+    }
+    
+    // 比较promptSnippet
+    if (intentCreateForm.value.promptSnippet !== originalNodeData.value.promptSnippet) {
+      changedFields.promptSnippet = intentCreateForm.value.promptSnippet
+    }
+    
+    // 比较promptTemplate
+    if (intentCreateForm.value.promptTemplate !== originalNodeData.value.promptTemplate) {
+      changedFields.promptTemplate = intentCreateForm.value.promptTemplate
+    }
+    
+    // 检查是否有字段发生变化
+    const hasChanges = Object.keys(changedFields).length > 0
+    
+    if (!hasChanges) {
+      showToast('未检测到数据变化', 'info')
+      showIntentEditModal.value = false
+      return
+    }
+    
+    // 构建最终的formData
+    formData = {
+      ...formData,
+      ...changedFields
+    }
+    
+    const response = await axios.put(`/intent-tree/mkdir/${intentCreateForm.value.id}`, formData)
     if (response.data.code === '0') {
       showToast('更新成功', 'success')
       showIntentEditModal.value = false
       loadIntentTree()
+      resetCreateForm()
     } else {
       showToast(response.data.message || '更新失败', 'error')
     }
@@ -1188,7 +1306,7 @@ const handleDelete = async () => {
     const response = await axios.delete(`/intent-tree/remove/${selectedNode.value.id}`)
     if (response.data.code === '0') {
       showToast('删除成功', 'success')
-      showDeleteConfirm.value = false
+      showIntentDeleteConfirm.value = false
       selectedNode.value = null
       loadIntentTree()
     } else {
@@ -1200,8 +1318,17 @@ const handleDelete = async () => {
   }
 }
 
-// 打开新建节点模态框
-const openCreateModal = () => {
+// 打开新建根节点模态框
+const openCreateRootModal = () => {
+  resetCreateForm()
+  // 新建根节点时，parentCode 为空字符串（ROOT），level 为 0
+  intentCreateForm.value.parentCode = ''
+  intentCreateForm.value.level = 0
+  showIntentCreateModal.value = true
+}
+
+// 打开新建子节点模态框
+const openCreateChildModal = () => {
   resetCreateForm()
   if (selectedNode.value) {
     intentCreateForm.value.parentCode = selectedNode.value.intentCode
@@ -1210,20 +1337,74 @@ const openCreateModal = () => {
   showIntentCreateModal.value = true
 }
 
+// 原始节点数据，用于比较变化
+const originalNodeData = ref(null)
+
 // 打开编辑节点模态框
 const openEditModal = () => {
   if (!selectedNode.value) return
   
-  intentEditForm.value = {
+  // 找到当前collectionName对应的kbId
+  const currentKb = knowledgeList.value.find(kb => kb.collection === selectedNode.value.collectionName)
+  
+  // 保存原始数据，用于后续比较
+  let originalExamples = []
+  if (selectedNode.value.examples) {
+    if (Array.isArray(selectedNode.value.examples)) {
+      originalExamples = selectedNode.value.examples
+    } else if (typeof selectedNode.value.examples === 'string') {
+      originalExamples = selectedNode.value.examples.split(';').filter(item => item.trim())
+    }
+  }
+  
+  originalNodeData.value = {
     id: selectedNode.value.id,
     name: selectedNode.value.name,
+    intentCode: selectedNode.value.intentCode,
     level: selectedNode.value.level,
     parentCode: selectedNode.value.parentCode,
     description: selectedNode.value.description,
-    examples: selectedNode.value.examples ? selectedNode.value.examples.split(';') : [],
-    examplesText: selectedNode.value.examples ? selectedNode.value.examples.split(';').join('\n') : '',
+    examples: originalExamples,
     collectionName: selectedNode.value.collectionName,
     topK: selectedNode.value.topK,
+    kind: selectedNode.value.kind,
+    sortOrder: selectedNode.value.sortOrder,
+    enabled: selectedNode.value.enabled,
+    promptSnippet: selectedNode.value.promptSnippet,
+    promptTemplate: selectedNode.value.promptTemplate
+  }
+  
+  // 重置表单
+  resetCreateForm()
+  
+  // 填充表单数据
+  let examplesArray = []
+  let examplesText = ''
+  
+  if (selectedNode.value.examples) {
+    if (Array.isArray(selectedNode.value.examples)) {
+      // 如果examples是数组，直接使用
+      examplesArray = selectedNode.value.examples
+      examplesText = examplesArray.join('\n')
+    } else if (typeof selectedNode.value.examples === 'string') {
+      // 如果examples是字符串，按分号分割
+      examplesArray = selectedNode.value.examples.split(';').filter(item => item.trim())
+      examplesText = examplesArray.join('\n')
+    }
+  }
+  
+  intentCreateForm.value = {
+    id: selectedNode.value.id,
+    name: selectedNode.value.name,
+    intentCode: selectedNode.value.intentCode,
+    level: selectedNode.value.level,
+    parentCode: selectedNode.value.parentCode,
+    description: selectedNode.value.description,
+    examples: examplesArray,
+    examplesText: examplesText,
+    collectionName: selectedNode.value.collectionName,
+    kbId: currentKb ? currentKb.kbId : '',
+    topK: selectedNode.value.topK || '',
     kind: selectedNode.value.kind,
     sortOrder: selectedNode.value.sortOrder,
     enabled: selectedNode.value.enabled === 1,
@@ -1232,7 +1413,7 @@ const openEditModal = () => {
   }
   
   // 同步标签
-  syncEditExampleTags()
+  syncExampleTags()
   
   showIntentEditModal.value = true
 }
@@ -1248,13 +1429,17 @@ const resetCreateForm = () => {
     description: '',
     examples: [],
     examplesText: '',
-    topK: 5,
+    topK: '',
     kind: 0,
     sortOrder: 0,
     enabled: true,
     promptSnippet: '',
     promptTemplate: ''
   }
+  
+  // 重置示例问题标签
+  exampleTags.value = []
+  newExampleTag.value = ''
   
   // 重置展开状态
   descriptionExpanded.value = true
@@ -1306,8 +1491,8 @@ const selectParentOption = (value) => {
 
 // 获取父节点选项的标签
 const getParentOptionLabel = (value) => {
-  // 当value为空字符串时，直接返回'ROOT'
-  if (value === '') {
+  // 当value为空字符串或null时，直接返回'ROOT'
+  if (value === '' || value === null) {
     return 'ROOT'
   }
   const option = parentOptions.value.find(opt => opt.value === value)
@@ -1342,6 +1527,18 @@ const handleClickOutside = (event) => {
   if (customSelect && !customSelect.contains(event.target)) {
     parentSelectOpen.value = false
   }
+}
+
+// 复制文本到剪贴板
+const copyToClipboard = (text) => {
+  navigator.clipboard.writeText(text)
+    .then(() => {
+      showToast('复制成功', 'success')
+    })
+    .catch(err => {
+      console.error('复制失败:', err)
+      showToast('复制失败', 'error')
+    })
 }
 </script>
 
@@ -2955,7 +3152,7 @@ const handleClickOutside = (event) => {
                 </svg>
                 刷新
               </BaseButton>
-              <BaseButton type="primary" size="small" @click="openCreateModal" class="create-button">
+              <BaseButton type="primary" size="small" @click="openCreateRootModal" class="create-button">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="12" y1="5" x2="12" y2="19"/>
                   <line x1="5" y1="12" x2="19" y2="12"/>
@@ -3000,8 +3197,8 @@ const handleClickOutside = (event) => {
                       <div class="node-toggle" v-else></div>
                       <div class="node-name">{{ node.name }}</div>
                       <div class="node-badges">
-                        <span class="badge level-badge">{{ levelOptions.find(opt => opt.value === node.level)?.label }}</span>
-                        <span class="badge kind-badge">{{ kindOptions.find(opt => opt.value === node.kind)?.label }}</span>
+                        <span class="badge level-badge">{{ levelOptionsTag.find(opt => opt.value === node.level)?.label }}</span>
+                        <span class="badge kind-badge">{{ kindOptionsTag.find(opt => opt.value === node.kind)?.label }}</span>
                       </div>
                     </div>
                     <div v-if="node.children && node.children.length > 0 && expandedNodes.has(node.id)" class="node-children">
@@ -3021,8 +3218,8 @@ const handleClickOutside = (event) => {
                           <div class="node-toggle" v-else></div>
                           <div class="node-name">{{ child.name }}</div>
                           <div class="node-badges">
-                            <span class="badge level-badge">{{ levelOptions.find(opt => opt.value === child.level)?.label }}</span>
-                            <span class="badge kind-badge">{{ kindOptions.find(opt => opt.value === child.kind)?.label }}</span>
+                            <span class="badge level-badge">{{ levelOptionsTag.find(opt => opt.value === child.level)?.label }}</span>
+                            <span class="badge kind-badge">{{ kindOptionsTag.find(opt => opt.value === child.kind)?.label }}</span>
                           </div>
                         </div>
                         <div v-if="child.children && child.children.length > 0 && expandedNodes.has(child.id)" class="node-children">
@@ -3035,8 +3232,8 @@ const handleClickOutside = (event) => {
                               <div class="node-toggle"></div>
                               <div class="node-name">{{ grandchild.name }}</div>
                               <div class="node-badges">
-                                <span class="badge level-badge">{{ levelOptions.find(opt => opt.value === grandchild.level)?.label }}</span>
-                                <span class="badge kind-badge">{{ kindOptions.find(opt => opt.value === grandchild.kind)?.label }}</span>
+                                <span class="badge level-badge">{{ levelOptionsTag.find(opt => opt.value === grandchild.level)?.label }}</span>
+                                <span class="badge kind-badge">{{ kindOptionsTag.find(opt => opt.value === grandchild.kind)?.label }}</span>
                               </div>
                             </div>
                           </div>
@@ -3056,7 +3253,7 @@ const handleClickOutside = (event) => {
                   <p class="panel-subtitle">查看并管理当前选择的节点</p>
                 </div>
                 <div class="panel-actions" v-if="selectedNode">
-                  <BaseButton type="primary" size="small" @click="openCreateModal" class="action-button">
+                  <BaseButton type="primary" size="small" @click="openCreateChildModal" class="action-button">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="12" y1="5" x2="12" y2="19"/>
                       <line x1="5" y1="12" x2="19" y2="12"/>
@@ -3070,7 +3267,7 @@ const handleClickOutside = (event) => {
                     </svg>
                     编辑节点
                   </BaseButton>
-                  <BaseButton type="danger" size="small" @click="showDeleteConfirm = true" class="action-button">
+                  <BaseButton type="danger" size="small" @click="showIntentDeleteConfirm = true" class="action-button">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <polyline points="3 6 5 6 21 6"/>
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -3091,13 +3288,13 @@ const handleClickOutside = (event) => {
                   <div class="node-header-section">
                     <h3 class="node-title">{{ selectedNode.name }}</h3>
                     <div class="node-meta">
-                      <span class="badge level-badge">{{ levelOptions.find(opt => opt.value === selectedNode.level)?.label }}</span>
-                      <span class="badge kind-badge">{{ kindOptions.find(opt => opt.value === selectedNode.kind)?.label }}</span>
+                      <span class="badge level-badge">{{ levelOptionsTag.find(opt => opt.value === selectedNode.level)?.label }}</span>
+                      <span class="badge kind-badge">{{ kindOptionsTag.find(opt => opt.value === selectedNode.kind)?.label }}</span>
                       <span class="badge status-badge" :class="selectedNode.enabled === 1 ? 'status-enabled' : 'status-disabled'">
                         {{ selectedNode.enabled === 1 ? '启用' : '禁用' }}
                       </span>
+                      <span class="node-code" style="font-weight: bold;">{{ selectedNode.intentCode }}</span>
                     </div>
-                    <div class="node-code">{{ selectedNode.intentCode }}</div>
                   </div>
                   
                   <!-- 节点操作 - 已移动到面板头部 -->
@@ -3139,6 +3336,7 @@ const handleClickOutside = (event) => {
                         v-for="(example, index) in parseExamples(selectedNode.examples)" 
                         :key="index" 
                         class="example-tag"
+                        @dblclick="copyToClipboard(example)"
                       >
                         {{ example }}
                       </span>
@@ -3253,7 +3451,10 @@ const handleClickOutside = (event) => {
                           v-model="intentCreateForm.kbId" 
                           class="form-select"
                         >
-                          <option value="">请选择知识库</option>
+                          <option value="" disabled selected>请选择知识库</option>
+                          <option v-for="kb in knowledgeList" :key="kb.kbId" :value="kb.kbId">
+                            {{ kb.name }} ({{ kb.collection }})
+                          </option>
                         </select>
                       </div>
                     </div>
@@ -3379,7 +3580,7 @@ const handleClickOutside = (event) => {
                     
                     <div class="form-actions">
                       <BaseButton type="secondary" @click="showIntentCreateModal = false">取消</BaseButton>
-                      <BaseButton type="primary" native-type="submit">创建</BaseButton>
+                      <BaseButton type="primary" buttonType="submit">创建</BaseButton>
                     </div>
                   </form>
                 </div>
@@ -3396,113 +3597,229 @@ const handleClickOutside = (event) => {
               </div>
               <ScrollableContainer>
                 <div class="modal-body">
-                  <BaseForm @submit="handleIntentUpdate" :show-actions="false">
-                    <FormField 
-                      label="节点名称" 
-                      name="name"
-                      v-model="intentEditForm.name" 
-                      placeholder="请输入节点名称" 
-                      :required="true"
-                      type="text"
-                    />
-                    <FormField 
-                      label="级别" 
-                      name="level"
-                      v-model="intentEditForm.level" 
-                      :required="true"
-                      type="select"
-                      :options="levelOptions"
-                    />
-                    <FormField 
-                      label="父节点" 
-                      name="parentCode"
-                      v-model="intentEditForm.parentCode" 
-                      type="select"
-                      :options="parentOptions"
-                    />
-                    <FormField 
-                      label="类型" 
-                      name="kind"
-                      v-model="intentEditForm.kind" 
-                      :required="true"
-                      type="select"
-                      :options="kindOptions"
-                    />
-                    <FormField 
-                      label="描述" 
-                      name="description"
-                      v-model="intentEditForm.description" 
-                      placeholder="请输入节点描述" 
-                      type="textarea"
-                      :rows="4"
-                    />
-                    <FormField label="示例问题">
-                      <!-- 标签显示区域 -->
-                      <div class="example-tags">
-                        <span 
-                          v-for="tag in editExampleTags" 
-                          :key="tag" 
-                          class="example-tag"
-                        >
-                          {{ tag }}
-                          <span class="tag-remove" @click="removeEditExampleTag(tag)">×</span>
-                        </span>
-                      </div>
-                      <!-- 输入区域 -->
-                      <div class="example-input">
+                  <p class="modal-subtitle">配置意图节点的层级、类型与描述信息</p>
+                  <form @submit.prevent="handleIntentUpdate">
+                    <div class="form-grid">
+                      <div class="form-item">
+                        <label class="form-label">节点名称 <span class="required">*</span></label>
                         <input 
                           type="text" 
-                          v-model="newEditExampleTag" 
-                          placeholder="输入示例问题并按回车添加"
-                          @keyup.enter="addEditExampleTag"
-                          class="example-input-field"
+                          v-model="intentCreateForm.name" 
+                          placeholder="例如：OA系统" 
+                          class="form-input"
+                          required
                         />
-                        <BaseButton type="primary" size="small" @click="addEditExampleTag">添加</BaseButton>
                       </div>
-                      <!-- 隐藏的textarea用于保持数据绑定 -->
-                      <textarea 
-                        v-model="intentEditForm.examplesText" 
-                        class="hidden-textarea"
-                        @input="syncEditExampleTags"
-                      ></textarea>
-                    </FormField>
-                    <FormField 
-                      label="排序" 
-                      name="sortOrder"
-                      v-model="intentEditForm.sortOrder" 
-                      placeholder="请输入排序值" 
-                      type="number"
-                    />
-                    <FormField 
-                      label="状态" 
-                      name="enabled"
-                      v-model="intentEditForm.enabled" 
-                      type="switch"
-                    />
-                    <FormField 
-                      label="提示词模板" 
-                      name="promptTemplate"
-                      v-model="intentEditForm.promptTemplate" 
-                      placeholder="请输入提示词模板" 
-                      type="textarea"
-                      :rows="5"
-                    />
+                      <div class="form-item">
+                        <label class="form-label">意图标识</label>
+                        <input 
+                          type="text" 
+                          v-model="intentCreateForm.intentCode" 
+                          placeholder="例如：biz-oa" 
+                          class="form-input"
+                        />
+                      </div>
+                      <div class="form-item">
+                        <label class="form-label">层级 <span class="required">*</span></label>
+                        <select 
+                          v-model="intentCreateForm.level" 
+                          class="form-select"
+                          required
+                        >
+                          <option v-for="option in levelOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                          </option>
+                        </select>
+                      </div>
+                      <div class="form-item">
+                        <label class="form-label">类型 <span class="required">*</span></label>
+                        <select 
+                          v-model="intentCreateForm.kind" 
+                          class="form-select"
+                          required
+                        >
+                          <option v-for="option in kindOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <!-- 父节点 -->
+                    <div class="form-row">
+                      <div class="form-item full-width">
+                        <label class="form-label">父节点</label>
+                        <div class="custom-select" @click="toggleParentSelect">
+                          <div class="custom-select-selected">
+                            {{ getParentOptionLabel(intentCreateForm.parentCode) }}
+                            <span class="select-arrow">{{ parentSelectOpen ? '▼' : '▶' }}</span>
+                          </div>
+                          <div v-if="parentSelectOpen" class="custom-select-options">
+                            <div 
+                              v-for="option in parentOptions" 
+                              :key="option.value"
+                              class="custom-select-option"
+                              :class="{ selected: intentCreateForm.parentCode === option.value }"
+                              @click="selectParentOption(option.value)"
+                            >
+                              {{ option.label }}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- 知识库 -->
+                    <div class="form-row">
+                      <div class="form-item full-width">
+                        <label class="form-label">Collection名称</label>
+                        <select 
+                          v-model="intentCreateForm.kbId" 
+                          class="form-select"
+                        >
+                          <option value="">请选择知识库</option>
+                          <option v-for="kb in knowledgeList" :key="kb.kbId" :value="kb.kbId">
+                            {{ kb.collection }}
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <!-- 描述与示例 -->
+                    <div class="form-section">
+                      <div class="section-header" @click="descriptionExpanded = !descriptionExpanded">
+                        <span class="section-title">描述与示例</span>
+                        <span class="section-toggle">{{ descriptionExpanded ? '▼' : '▶' }}</span>
+                      </div>
+                      <div v-if="descriptionExpanded" class="section-content">
+                        <div class="form-item">
+                          <label class="form-label">描述</label>
+                          <textarea 
+                            v-model="intentCreateForm.description" 
+                            placeholder="节点的语义说明与说明场景" 
+                            class="form-textarea"
+                            rows="4"
+                          ></textarea>
+                        </div>
+                        <div class="form-item">
+                          <label class="form-label">示例问题</label>
+                          <!-- 标签显示区域 -->
+                          <div class="example-tags">
+                            <span 
+                              v-for="tag in exampleTags" 
+                              :key="tag" 
+                              class="example-tag"
+                            >
+                              {{ tag }}
+                              <span class="tag-remove" @click="removeExampleTag(tag)">×</span>
+                            </span>
+                          </div>
+                          <!-- 输入区域 -->
+                          <div class="example-input">
+                            <input 
+                              type="text" 
+                              v-model="newExampleTag" 
+                              placeholder="输入示例问题并按回车添加"
+                              @keyup.enter="addExampleTag"
+                              class="example-input-field"
+                            />
+                            <BaseButton type="primary" size="small" @click="addExampleTag">添加</BaseButton>
+                          </div>
+                          <!-- 隐藏的textarea用于保持数据绑定 -->
+                          <textarea 
+                            v-model="intentCreateForm.examplesText" 
+                            class="hidden-textarea"
+                            @input="syncExampleTags"
+                          ></textarea>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Prompt 配置 -->
+                    <div class="form-section">
+                      <div class="section-header" @click="promptExpanded = !promptExpanded">
+                        <span class="section-title">Prompt 配置</span>
+                        <span class="section-toggle">{{ promptExpanded ? '▼' : '▶' }}</span>
+                      </div>
+                      <div v-if="promptExpanded" class="section-content">
+                        <div class="form-item">
+                          <label class="form-label">短规则片段（可选）</label>
+                          <textarea 
+                            v-model="intentCreateForm.promptSnippet" 
+                            placeholder="多意图场景下的特定规则，会添加到整体提示词中" 
+                            class="form-textarea"
+                            rows="3"
+                          ></textarea>
+                        </div>
+                        <div class="form-item">
+                          <label class="form-label">Prompt模板（可选）</label>
+                          <textarea 
+                            v-model="intentCreateForm.promptTemplate" 
+                            placeholder="场景用的完整Prompt模板，KB和MCP节点都可配置" 
+                            class="form-textarea"
+                            rows="5"
+                          ></textarea>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- 高级设置 -->
+                    <div class="form-section">
+                      <div class="section-header" @click="advancedExpanded = !advancedExpanded">
+                        <span class="section-title">高级设置</span>
+                        <span class="section-toggle">{{ advancedExpanded ? '▼' : '▶' }}</span>
+                      </div>
+                      <div v-if="advancedExpanded" class="section-content">
+                        <div class="form-grid">
+                          <div class="form-item">
+                            <label class="form-label">节点 TopK（可选）</label>
+                            <input 
+                              type="number" 
+                              v-model="intentCreateForm.topK" 
+                              placeholder="留空则使用全局 TopK" 
+                              class="form-input"
+                            />
+                          </div>
+                          <div class="form-item">
+                            <label class="form-label">排序</label>
+                            <input 
+                              type="number" 
+                              v-model="intentCreateForm.sortOrder" 
+                              placeholder="数值越小越靠前" 
+                              class="form-input"
+                            />
+                          </div>
+                        </div>
+                        <div class="form-item">
+                          <label class="form-label">状态</label>
+                          <div class="form-switch">
+                            <input 
+                              type="checkbox" 
+                              v-model="intentCreateForm.enabled" 
+                              id="enabled-switch"
+                            />
+                            <label for="enabled-switch" class="switch-label"></label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
                     <div class="form-actions">
                       <BaseButton type="secondary" @click="showIntentEditModal = false">取消</BaseButton>
-                      <BaseButton type="primary" native-type="submit">保存</BaseButton>
+                      <BaseButton type="primary" buttonType="submit">保存</BaseButton>
                     </div>
-                  </BaseForm>
+                  </form>
                 </div>
               </ScrollableContainer>
             </div>
           </div>
           
           <!-- 删除确认模态框 -->
-          <div v-if="showDeleteConfirm" class="modal-overlay">
+          <div v-if="showIntentDeleteConfirm" class="modal-overlay">
             <div class="modal">
               <div class="modal-header">
                 <h3 class="modal-title">确认删除</h3>
-                <BaseButton type="secondary" size="small" @click="showDeleteConfirm = false" class="close-button">&times;</BaseButton>
+                <BaseButton type="secondary" size="small" @click="showIntentDeleteConfirm = false" class="close-button">&times;</BaseButton>
               </div>
               <div class="modal-body">
                 <div class="delete-warning">
@@ -3516,7 +3833,7 @@ const handleClickOutside = (event) => {
                 </div>
               </div>
               <div class="modal-footer">
-                <BaseButton type="secondary" @click="showDeleteConfirm = false">取消</BaseButton>
+                <BaseButton type="secondary" @click="showIntentDeleteConfirm = false">取消</BaseButton>
                 <BaseButton type="danger" @click="handleDelete">删除</BaseButton>
               </div>
             </div>
@@ -5307,13 +5624,13 @@ const handleClickOutside = (event) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px 28px;
+  padding: 20px 28px;
   border-bottom: 1px solid #f0f0f0;
   background-color: #fafafa;
 }
 
 .modal-header h3 {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: #333;
   margin: 0;
@@ -5345,7 +5662,7 @@ const handleClickOutside = (event) => {
 }
 
 .modal-body {
-  padding: 28px;
+  padding: 20px 28px;
   max-height: 60vh;
   overflow-y: auto;
 }
@@ -6670,8 +6987,8 @@ input:checked + .slider:before {
 .intent-management-container {
   display: flex;
   gap: 24px;
-  height: calc(100vh - 280px);
-  margin-top: 12px;
+  height: calc(100vh - 350px);
+  margin-top: 0;
 }
 
 /* 左侧意图树面板 */
@@ -6872,7 +7189,6 @@ input:checked + .slider:before {
 .node-details {
   display: flex;
   flex-direction: column;
-  gap: 20px;
 }
 
 .node-header-section {
