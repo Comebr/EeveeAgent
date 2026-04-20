@@ -46,7 +46,7 @@ const formData = reactive({
   id: '',
   username: '',
   password: '',
-  role: 'user',
+  role: 'viewer',
   avatar: '/avatars/avatar-1.svg',
   email: ''
 })
@@ -180,7 +180,7 @@ const handleAdd = () => {
     id: '',
     username: '',
     password: '',
-    role: 'user',
+    role: 'viewer',
     avatar: '/avatars/avatar-1.svg',
     email: ''
   })
@@ -332,12 +332,16 @@ const handleAvatarSelect = (avatar) => {
 
 // 获取角色标签样式
 const getRoleClass = (role) => {
-  return role === 'admin' ? 'role-admin' : 'role-user'
+  if (role === 'admin') return 'role-admin'
+  if (role === 'viewer') return 'role-visitor'
+  return 'role-user'
 }
 
 // 获取角色显示文本
 const getRoleText = (role) => {
-  return role === 'admin' ? '管理员' : '普通用户'
+  if (role === 'admin') return '管理员'
+  if (role === 'viewer') return '游客'
+  return '普通用户'
 }
 
 onMounted(() => {
@@ -444,7 +448,7 @@ onMounted(() => {
           </button>
         </div>
         <div class="dialog-body">
-          <BaseForm :model="formData" :rules="formRules" @submit="handleSubmit" :loading="loading">
+          <form @submit.prevent="handleSubmit" class="form">
             <!-- 头像选择 -->
             <div class="form-item">
               <label>头像</label>
@@ -459,47 +463,56 @@ onMounted(() => {
               </div>
             </div>
 
-            <FormField 
-              v-model="formData.username" 
-              name="username" 
-              label="用户名" 
-              :required="true"
-              :disabled="isEdit"
-              :error="formErrors.username"
-              placeholder="请输入用户名"
-            />
+            <!-- 用户名 -->
+            <div class="form-item">
+              <label>用户名 <span class="required">*</span></label>
+              <input 
+                type="text" 
+                v-model="formData.username" 
+                :disabled="isEdit"
+                :class="{ 'error': formErrors.username }"
+                placeholder="请输入用户名"
+              />
+              <div class="error-text" v-if="formErrors.username">{{ formErrors.username }}</div>
+            </div>
 
-            <FormField 
-              v-model="formData.password" 
-              name="password" 
-              label="密码" 
-              type="password"
-              :required="!isEdit"
-              v-if="!isEdit"
-              :error="formErrors.password"
-              placeholder="请输入密码"
-            />
+            <!-- 密码 -->
+            <div class="form-item" v-if="!isEdit">
+              <label>密码 <span class="required">*</span></label>
+              <input 
+                type="password" 
+                v-model="formData.password" 
+                :class="{ 'error': formErrors.password }"
+                placeholder="请输入密码"
+              />
+              <div class="error-text" v-if="formErrors.password">{{ formErrors.password }}</div>
+            </div>
 
-            <FormField 
-              v-model="formData.role" 
-              name="role" 
-              label="角色" 
-              :required="true"
-              :error="formErrors.role"
-              type="select"
-            >
-              <option value="user">普通用户</option>
-              <option value="admin">管理员</option>
-            </FormField>
+            <!-- 角色 -->
+            <div class="form-item">
+              <label>角色 <span class="required">*</span></label>
+              <select 
+                v-model="formData.role" 
+                :class="{ 'error': formErrors.role }"
+              >
+                <option value="admin">管理员</option>
+                <option value="viewer">游客</option>
+              </select>
+              <div class="error-text" v-if="formErrors.role">{{ formErrors.role }}</div>
+            </div>
 
-            <FormField 
-              v-model="formData.email" 
-              name="email" 
-              label="邮箱"
-              :error="formErrors.email"
-              placeholder="请输入邮箱（选填）"
-            />
-          </BaseForm>
+            <!-- 邮箱 -->
+            <div class="form-item">
+              <label>邮箱</label>
+              <input 
+                type="email" 
+                v-model="formData.email" 
+                :class="{ 'error': formErrors.email }"
+                placeholder="请输入邮箱（选填）"
+              />
+              <div class="error-text" v-if="formErrors.email">{{ formErrors.email }}</div>
+            </div>
+          </form>
         </div>
         <div class="dialog-footer">
           <BaseButton @click="dialogVisible = false">取消</BaseButton>
@@ -918,6 +931,7 @@ onMounted(() => {
   border-radius: 6px;
   font-size: 14px;
   transition: all 0.2s;
+  box-sizing: border-box;
 }
 
 .form .form-item input:focus,

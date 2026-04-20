@@ -19,6 +19,7 @@ const props = defineProps({
 const emit = defineEmits(['update:visible', 'select'])
 
 const selectedAvatar = ref(props.currentAvatar)
+const customAvatarUrl = ref('')
 
 // 关闭选择器
 const close = () => {
@@ -28,10 +29,14 @@ const close = () => {
 // 选择头像
 const selectAvatar = (avatar) => {
   selectedAvatar.value = avatar
+  customAvatarUrl.value = ''
 }
 
 // 确认选择
 const confirmSelect = () => {
+  if (customAvatarUrl.value.trim()) {
+    selectedAvatar.value = customAvatarUrl.value.trim()
+  }
   emit('select', selectedAvatar.value)
   close()
 }
@@ -75,6 +80,16 @@ const isSelected = (avatar) => {
           </div>
         </div>
         
+        <div class="avatar-url-input">
+          <label>自定义头像 URL</label>
+          <input 
+            type="text" 
+            v-model="customAvatarUrl"
+            placeholder="请输入头像 URL"
+            @input="selectedAvatar = customAvatarUrl"
+          />
+        </div>
+        
         <div class="current-preview">
           <span class="preview-label">当前选择:</span>
           <img :src="selectedAvatar" alt="当前头像" />
@@ -106,7 +121,7 @@ const isSelected = (avatar) => {
 .avatar-selector {
   background: white;
   border-radius: 12px;
-  width: 520px;
+  width: 480px;
   max-width: 90vw;
   max-height: 90vh;
   overflow: hidden;
@@ -210,6 +225,33 @@ const isSelected = (avatar) => {
   justify-content: center;
 }
 
+.avatar-url-input {
+  margin: 20px 0;
+}
+
+.avatar-url-input label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.avatar-url-input input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.avatar-url-input input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
 .current-preview {
   display: flex;
   align-items: center;
@@ -217,6 +259,7 @@ const isSelected = (avatar) => {
   padding: 16px;
   background: #f5f7fa;
   border-radius: 8px;
+  margin-top: 20px;
 }
 
 .preview-label {
