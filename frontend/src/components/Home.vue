@@ -249,35 +249,82 @@ const sendMessage = async () => {
     let receivedConversationId = currentConversationId.value
     
     const startSmoothOutput = () => {
-        const CHAR_PER_INTERVAL = 2
-        const INTERVAL_MS = 30
+        // 流式chunk分段输出配置
+        const MIN_CHUNK_SIZE = 5
+        const MAX_CHUNK_SIZE = 20
+        const CHAR_INTERVAL_MS = 12 // 每个字符的输出间隔
         
-        outputTimer = setInterval(() => {
-          if (buffer.length > 0) {
-            const charsToAdd = Math.min(buffer.length, CHAR_PER_INTERVAL)
-            displayContent += buffer.substring(0, charsToAdd)
-            buffer = buffer.substring(charsToAdd)
-            
-            // 流式输出过程中使用临时内容，避免频繁更新导致代码高亮闪烁
-            const msgIndex = sessionState.messages.findIndex(msg => msg.id === aiThinkingMessage.id)
-            if (msgIndex !== -1) {
-              sessionState.messages[msgIndex] = {
-                ...sessionState.messages[msgIndex],
-                content: displayContent,
-                isStreaming: true
+        let currentIndex = 0
+        
+        const processChunk = () => {
+          if (currentIndex >= buffer.length) {
+            if (isComplete) {
+              // 所有内容处理完成
+              const msgIndex = sessionState.messages.findIndex(msg => msg.id === aiThinkingMessage.id)
+              if (msgIndex !== -1) {
+                sessionState.messages[msgIndex] = {
+                  ...sessionState.messages[msgIndex],
+                  isStreaming: false,
+                  content: buffer // 确保最终内容完整
+                }
               }
+              nextTick(() => {
+                if (currentConversationId.value === currentSessionId || (!currentConversationId.value && currentSessionId.includes('temp'))) {
+                  scrollToBottom()
+                }
+              })
             }
-            nextTick(() => {
-              // 只有当当前会话是激活会话时才滚动
-              if (currentConversationId.value === currentSessionId || (!currentConversationId.value && currentSessionId.includes('temp'))) {
-                scrollToBottom()
-              }
-            })
-          } else if (isComplete) {
-            clearInterval(outputTimer)
-            outputTimer = null
+            return
           }
-        }, INTERVAL_MS)
+          
+          // 生成随机chunk大小
+          const chunkSize = Math.min(
+            MAX_CHUNK_SIZE,
+            Math.max(MIN_CHUNK_SIZE, Math.floor(Math.random() * (MAX_CHUNK_SIZE - MIN_CHUNK_SIZE + 1)) + MIN_CHUNK_SIZE),
+            buffer.length - currentIndex
+          )
+          
+          const chunk = buffer.substring(currentIndex, currentIndex + chunkSize)
+          let chunkIndex = 0
+          
+          const outputChar = () => {
+            if (chunkIndex < chunk.length) {
+              displayContent += chunk[chunkIndex]
+              chunkIndex++
+              
+              // 更新消息内容
+              const msgIndex = sessionState.messages.findIndex(msg => msg.id === aiThinkingMessage.id)
+              if (msgIndex !== -1) {
+                sessionState.messages[msgIndex] = {
+                  ...sessionState.messages[msgIndex],
+                  content: displayContent,
+                  isStreaming: true
+                }
+              }
+              
+              // 滚动到底部
+              nextTick(() => {
+                if (currentConversationId.value === currentSessionId || (!currentConversationId.value && currentSessionId.includes('temp'))) {
+                  scrollToBottom()
+                }
+              })
+              
+              // 继续输出下一个字符
+              outputTimer = setTimeout(outputChar, CHAR_INTERVAL_MS)
+            } else {
+              // 当前chunk输出完成，处理下一个chunk
+              currentIndex += chunkSize
+              // 片段之间几乎无延迟，直接处理下一个chunk
+              processChunk()
+            }
+          }
+          
+          // 开始输出当前chunk
+          outputChar()
+        }
+        
+        // 开始处理
+        processChunk()
         
         // 存储定时器以便清理
         if (!window.__chatTimers) {
@@ -298,7 +345,6 @@ const sendMessage = async () => {
               content: ''
             }
           }
-          startSmoothOutput()
         }
         
         // 检查是否包含conversationId
@@ -348,9 +394,15 @@ const sendMessage = async () => {
         } catch (error) {
           // 不是JSON格式，继续处理
         }
-      }
-        
+      } else {
+        // 非JSON数据，添加到buffer
         buffer += event.data
+        
+        // 如果是首次收到数据，启动输出
+        if (firstDataReceived && !outputTimer) {
+          startSmoothOutput()
+        }
+      }
       }
       
       eventSource.onerror = (error) => {
@@ -535,35 +587,82 @@ const regenerateResponse = async (message) => {
       let outputTimer = null
       
       const startSmoothOutput = () => {
-        const CHAR_PER_INTERVAL = 2
-        const INTERVAL_MS = 30
+        // 流式chunk分段输出配置
+        const MIN_CHUNK_SIZE = 5
+        const MAX_CHUNK_SIZE = 20
+        const CHAR_INTERVAL_MS = 12 // 每个字符的输出间隔
         
-        outputTimer = setInterval(() => {
-          if (buffer.length > 0) {
-            const charsToAdd = Math.min(buffer.length, CHAR_PER_INTERVAL)
-            displayContent += buffer.substring(0, charsToAdd)
-            buffer = buffer.substring(charsToAdd)
-            
-            // 流式输出过程中使用临时内容，避免频繁更新导致代码高亮闪烁
-            const msgIndex = sessionState.messages.findIndex(msg => msg.id === message.id)
-            if (msgIndex !== -1) {
-              sessionState.messages[msgIndex] = {
-                ...sessionState.messages[msgIndex],
-                content: displayContent,
-                isStreaming: true
+        let currentIndex = 0
+        
+        const processChunk = () => {
+          if (currentIndex >= buffer.length) {
+            if (isComplete) {
+              // 所有内容处理完成
+              const msgIndex = sessionState.messages.findIndex(msg => msg.id === message.id)
+              if (msgIndex !== -1) {
+                sessionState.messages[msgIndex] = {
+                  ...sessionState.messages[msgIndex],
+                  isStreaming: false,
+                  content: buffer // 确保最终内容完整
+                }
               }
+              nextTick(() => {
+                if (currentConversationId.value === currentSessionId || (!currentConversationId.value && currentSessionId.includes('temp'))) {
+                  scrollToBottom()
+                }
+              })
             }
-            nextTick(() => {
-              // 只有当当前会话是激活会话时才滚动
-              if (currentConversationId.value === currentSessionId || (!currentConversationId.value && currentSessionId.includes('temp'))) {
-                scrollToBottom()
-              }
-            })
-          } else if (isComplete) {
-            clearInterval(outputTimer)
-            outputTimer = null
+            return
           }
-        }, INTERVAL_MS)
+          
+          // 生成随机chunk大小
+          const chunkSize = Math.min(
+            MAX_CHUNK_SIZE,
+            Math.max(MIN_CHUNK_SIZE, Math.floor(Math.random() * (MAX_CHUNK_SIZE - MIN_CHUNK_SIZE + 1)) + MIN_CHUNK_SIZE),
+            buffer.length - currentIndex
+          )
+          
+          const chunk = buffer.substring(currentIndex, currentIndex + chunkSize)
+          let chunkIndex = 0
+          
+          const outputChar = () => {
+            if (chunkIndex < chunk.length) {
+              displayContent += chunk[chunkIndex]
+              chunkIndex++
+              
+              // 更新消息内容
+              const msgIndex = sessionState.messages.findIndex(msg => msg.id === message.id)
+              if (msgIndex !== -1) {
+                sessionState.messages[msgIndex] = {
+                  ...sessionState.messages[msgIndex],
+                  content: displayContent,
+                  isStreaming: true
+                }
+              }
+              
+              // 滚动到底部
+              nextTick(() => {
+                if (currentConversationId.value === currentSessionId || (!currentConversationId.value && currentSessionId.includes('temp'))) {
+                  scrollToBottom()
+                }
+              })
+              
+              // 继续输出下一个字符
+              outputTimer = setTimeout(outputChar, CHAR_INTERVAL_MS)
+            } else {
+              // 当前chunk输出完成，处理下一个chunk
+              currentIndex += chunkSize
+              // 片段之间几乎无延迟，直接处理下一个chunk
+              processChunk()
+            }
+          }
+          
+          // 开始输出当前chunk
+          outputChar()
+        }
+        
+        // 开始处理
+        processChunk()
         
         // 存储定时器以便清理
         if (!window.__chatTimers) {
@@ -584,10 +683,27 @@ const regenerateResponse = async (message) => {
               content: ''
             }
           }
-          startSmoothOutput()
         }
         
-        buffer += event.data
+        // 检查是否包含conversationId
+        if (event.data.startsWith('{') && event.data.endsWith('}')) {
+          try {
+            const data = JSON.parse(event.data)
+            if (data.conversationId) {
+              receivedConversationId = data.conversationId
+            }
+          } catch (error) {
+            // 不是JSON格式，继续处理
+          }
+        } else {
+          // 非JSON数据，添加到buffer
+          buffer += event.data
+          
+          // 如果是首次收到数据，启动输出
+          if (firstDataReceived && !outputTimer) {
+            startSmoothOutput()
+          }
+        }
       }
       
       eventSource.onerror = (error) => {
@@ -939,7 +1055,9 @@ const deleteMessage = async (message) => {
     
     if (response.data.code === '0') {
       showToast('消息删除成功', 'success')
-      messages.value = messages.value.filter(msg => msg.id !== message.id)
+      // 获取当前会话状态并更新messages数组
+      const sessionState = getCurrentSessionState()
+      sessionState.messages = sessionState.messages.filter(msg => msg.id !== message.id)
     }
   } catch (error) {
     console.error('删除消息失败:', error)
@@ -1294,11 +1412,10 @@ const goToAdmin = () => {
       <div class="sidebar-section">
         <h3 class="section-title" v-show="!sidebarCollapsed">通用功能</h3>
         <div class="menu-list">
-          <div class="menu-item active" :class="{ collapsed: sidebarCollapsed }" @click="newChat">
+          <div class="menu-item new-chat" :class="{ collapsed: sidebarCollapsed }" @click="newChat">
             <span class="menu-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
+              <svg t="1776686284557" class="icon" viewBox="0 0 1025 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4850" width="16" height="16">
+                <path d="M900.938476 441.20303c-17.27205 0-30.034648 14.010497-30.034649 31.225824v412.487184c0 41.067206-31.849774 76.093448-72.973702 76.093448h-648.90723c-41.123928 0-88.941131-34.997881-88.941131-76.093448V235.243052c0-41.209012 47.817202-85.055629 88.941131-85.055629h349.439947c17.300411 0 31.225824-12.762598 31.225824-30.06301 0-17.27205-13.925413-30.006287-31.225824-30.006287H149.022895c-82.134412 0-148.982066 62.763623-148.982067 145.096564v649.644625c0 82.276218 66.876016 136.134384 148.982067 136.134384h648.935591c82.162773 0 133.014638-53.829804 133.014638-136.134384V472.428854c0-17.215327-12.79096-31.225824-30.034648-31.225824z m93.025162-309.19522l-105.844483-105.844483c-34.770991-34.856075-95.974741-34.856075-130.745732 0l-86.445334 101.618645-460.673083 441.047043-30.403345 264.270873 14.634446 12.79096 257.492515-35.054604 440.536539-461.297033 101.476838-82.928528c36.04725-36.075612 36.04725-98.52726-0.028361-134.602873z m-740.712855 640.228664l7.572475-123.740483 114.211076 114.154353-121.783551 9.58613z m176.747808-41.804601l-139.736273-139.651189 411.891596-409.764495 137.12703 137.155392-409.282353 412.260292z m520.373683-511.099528l-61.373918 61.373919-149.464209-149.464209 61.345556-61.430641c5.814073-5.785711 13.556716-8.96218 21.809863-8.962181 8.281508 0 16.024151 3.176469 21.838224 8.962181l105.787761 105.759399c12.081927 12.110288 12.081927 31.679606 0.056723 43.761532z" p-id="4851"></path>
               </svg>
             </span>
             <span class="menu-text" v-show="!sidebarCollapsed">新对话</span>
@@ -1408,14 +1525,7 @@ const goToAdmin = () => {
             </svg>
             <span>管理后台</span>
           </button>
-          <!-- 新建对话按钮 -->
-          <button class="new-chat-button">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            <span>新建对话</span>
-          </button>
+
         </div>
       </header>
       
@@ -1539,8 +1649,8 @@ const goToAdmin = () => {
                 :class="{ active: deepThinking }"
                 @click="toggleDeepThinking"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                <svg t="1776686431066" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="8999" width="16" height="16">
+                  <path d="M81.066667 469.333333l81.066666-78.933333C128 358.4 113.066667 320 113.066667 275.2c0-44.8 14.933333-83.2 46.933333-115.2C192 128 230.4 113.066667 275.2 113.066667c44.8 0 83.2 14.933333 115.2 46.933333l236.8 236.8 78.933333-78.933333L469.333333 81.066667C416 27.733333 352 0 275.2 0 198.4 0 134.4 27.733333 81.066667 81.066667S0 198.4 0 275.2c0 76.8 27.733333 140.8 81.066667 194.133333zM554.666667 81.066667l78.933333 81.066666C665.6 128 704 113.066667 748.8 113.066667c44.8 0 83.2 14.933333 115.2 46.933333 32 32 46.933333 70.4 46.933333 115.2s-14.933333 83.2-46.933333 115.2L627.2 627.2l78.933333 78.933333L942.933333 469.333333c53.333333-53.333333 81.066667-119.466667 81.066667-194.133333 0-76.8-27.733333-140.8-81.066667-194.133333S823.466667 0 748.8 0c-76.8 0-140.8 27.733333-194.133333 81.066667z m-85.333334 861.866666l-78.933333-81.066666c-32 32-70.4 46.933333-115.2 46.933333-44.8 0-83.2-14.933333-115.2-46.933333C128 829.866667 113.066667 791.466667 113.066667 746.666667s14.933333-83.2 46.933333-115.2l236.8-236.8-78.933333-78.933334L81.066667 552.533333C27.733333 608 0 672 0 748.8c0 76.8 27.733333 140.8 81.066667 194.133333S200.533333 1024 275.2 1024s140.8-27.733333 194.133333-81.066667z m100.266667-373.333333c21.333333-21.333333 27.733333-51.2 21.333333-78.933333-6.4-27.733333-29.866667-51.2-57.6-57.6-27.733333-6.4-57.6 0-78.933333 21.333333-32 32-32 83.2 0 115.2 32 32 83.2 32 115.2 0z m373.333333-14.933333l-81.066666 78.933333c32 32 46.933333 70.4 46.933333 115.2 0 44.8-14.933333 83.2-46.933333 115.2-32 32-70.4 46.933333-115.2 46.933333-44.8 0-83.2-14.933333-115.2-46.933333l-234.666667-236.8-78.933333 78.933333L554.666667 942.933333c53.333333 53.333333 119.466667 81.066667 194.133333 81.066667 76.8 0 140.8-27.733333 194.133333-81.066667s81.066667-119.466667 81.066667-194.133333c0-76.8-27.733333-140.8-81.066667-194.133333z" p-id="9000"></path>
                 </svg>
                 <span>深度思考</span>
               </button>
@@ -1776,13 +1886,33 @@ html, body {
 }
 
 .menu-item.active {
-  background-color: #e6f0ff;
+  background-color: transparent;
   color: #1a1a1a;
+  font-weight: 600;
+  border-left: none;
+  box-shadow: none;
+  transform: none;
+  transition: all 0.3s ease;
+}
+
+.menu-item.new-chat {
+  background-color: #e6f0ff;
+  color: #667eea;
   font-weight: 600;
   border-left: 3px solid #667eea;
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
   transform: translateX(2px);
   transition: all 0.3s ease;
+}
+
+.menu-item.new-chat:hover {
+  background-color: #e6f0ff;
+  color: #667eea;
+}
+
+.menu-item.new-chat .menu-icon svg {
+  fill: #667eea;
+  stroke: #667eea;
 }
 
 .menu-icon {
@@ -1812,6 +1942,7 @@ html, body {
   border-radius: 8px;
   cursor: pointer;
   transition: background-color 0.2s ease;
+  border: 1px solid #b8860b;
 }
 
 .user-info:hover {
@@ -1957,6 +2088,11 @@ html, body {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-color: #667eea;
   color: white;
+}
+
+.deep-thinking-button.active svg {
+  fill: white;
+  stroke: white;
 }
 
 /* 顶部header */
@@ -2330,7 +2466,7 @@ html, body {
   gap: 12px;
   justify-content: flex-end;
   width: 100%;
-  margin-bottom: 20px;
+  margin-bottom: 35px;
 }
 
 .user-message .message-content {
