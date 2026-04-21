@@ -5600,6 +5600,19 @@ const copyToClipboard = (text) => {
   overflow: hidden;
 }
 
+.edit-chunk-modal {
+  width: 700px;
+  max-width: 95%;
+}
+
+.edit-chunk-modal .modal-body {
+  max-height: 75vh;
+}
+
+.edit-chunk-modal .form-textarea {
+  min-height: 300px;
+}
+
 @keyframes modalSlideUp {
   from {
     opacity: 0;

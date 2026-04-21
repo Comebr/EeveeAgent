@@ -8,6 +8,7 @@
       { 'button-loading': loading },
       { 'button-disabled': disabled }
     ]"
+    :type="buttonType"
     :disabled="disabled || loading"
     @click="handleClick"
   >
@@ -37,6 +38,10 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  buttonType: {
+    type: String,
+    default: 'button'
   }
 })
 

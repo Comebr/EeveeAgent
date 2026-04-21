@@ -3,7 +3,6 @@ import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import MarkdownRenderer from './MarkdownRenderer.vue'
-import BaseCard from './common/BaseCard.vue'
 import BaseButton from './common/BaseButton.vue'
 
 const router = useRouter()
@@ -333,6 +332,50 @@ const sendMessage = async () => {
         window.__chatTimers.push(outputTimer)
       }
     
+    // 处理 init 事件，获取会话ID
+    eventSource.addEventListener('init', (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.conversationId) {
+          receivedConversationId = data.conversationId
+          
+          // 更新当前会话ID
+          currentConversationId.value = data.conversationId
+          
+          // 更新会话状态Map中的键
+          if (currentSessionId.includes('temp')) {
+            sessionStates.value.set(data.conversationId, sessionState)
+            sessionStates.value.delete(currentSessionId)
+          }
+          
+          // 查找并更新临时会话
+          const tempConversationIndex = conversations.value.findIndex(c => c.isTemp === true)
+          if (tempConversationIndex !== -1) {
+            // 更新临时会话为真实会话
+            conversations.value[tempConversationIndex] = {
+              ...conversations.value[tempConversationIndex],
+              id: data.conversationId,
+              conversationId: data.conversationId,
+              isTemp: false
+            }
+          } else {
+            // 如果没有临时会话，创建新会话
+            const newConversation = {
+              id: data.conversationId,
+              conversationId: data.conversationId,
+              userId: userInfo.value?.userId || localStorage.getItem('userId'),
+              title: '新对话',
+              lastTalkTime: new Date(),
+              delFlag: 0
+            }
+            conversations.value.unshift(newConversation)
+          }
+        }
+      } catch (error) {
+        console.error('处理init事件失败:', error)
+      }
+    })
+    
     eventSource.onmessage = (event) => {
         if (!firstDataReceived) {
           firstDataReceived = true
@@ -347,54 +390,6 @@ const sendMessage = async () => {
           }
         }
         
-        // 检查是否包含conversationId
-      if (event.data.startsWith('{') && event.data.endsWith('}')) {
-        try {
-          const data = JSON.parse(event.data)
-          if (data.conversationId) {
-            // 检查是否是新会话
-            if (!currentConversationId.value) {
-              receivedConversationId = data.conversationId
-              
-              // 更新当前会话ID
-              currentConversationId.value = data.conversationId
-              
-              // 更新会话状态Map中的键
-              if (currentSessionId.includes('temp')) {
-                sessionStates.value.set(data.conversationId, sessionState)
-                sessionStates.value.delete(currentSessionId)
-              }
-              
-              // 查找并更新临时会话
-              const tempConversationIndex = conversations.value.findIndex(c => c.isTemp === true)
-              if (tempConversationIndex !== -1) {
-                // 更新临时会话为真实会话
-                conversations.value[tempConversationIndex] = {
-                  ...conversations.value[tempConversationIndex],
-                  id: data.conversationId,
-                  conversationId: data.conversationId,
-                  isTemp: false
-                }
-              } else {
-                // 如果没有临时会话，创建新会话
-                const newConversation = {
-                  id: data.conversationId,
-                  conversationId: data.conversationId,
-                  userId: userInfo.value?.userId || localStorage.getItem('userId'),
-                  title: '新对话',
-                  lastTalkTime: new Date(),
-                  delFlag: 0
-                }
-                conversations.value.unshift(newConversation)
-              }
-            } else {
-              receivedConversationId = data.conversationId
-            }
-          }
-        } catch (error) {
-          // 不是JSON格式，继续处理
-        }
-      } else {
         // 非JSON数据，添加到buffer
         buffer += event.data
         
@@ -402,7 +397,6 @@ const sendMessage = async () => {
         if (firstDataReceived && !outputTimer) {
           startSmoothOutput()
         }
-      }
       }
       
       eventSource.onerror = (error) => {
@@ -1566,12 +1560,8 @@ const goToAdmin = () => {
               
               <div v-else class="ai-message">
                 <div class="message-avatar">
-                  <div class="ai-avatar" style="background-color: #667eea; border-radius: 50%; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                      <line x1="8" y1="21" x2="16" y2="21"/>
-                      <line x1="12" y1="17" x2="12" y2="21"/>
-                    </svg>
+                  <div class="ai-avatar" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px;">
+                    <svg t="1776749202611" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="12774" width="28" height="28"><path d="M576 192v64H352A160 160 0 0 0 192 416v192A160 160 0 0 0 352 768h320A160 160 0 0 0 832 608v-192h64v192a224 224 0 0 1-224 224h-320A224 224 0 0 1 128 608v-192A224 224 0 0 1 352 192H576z m73.344 217.344l45.312 45.312-3.52 3.456-39.168 39.168-12.608 12.608L637.248 512l57.408 57.344-45.312 45.312-80-80a32 32 0 0 1 0-45.312l17.28-17.28 20.096-20.032 21.12-21.184 3.84-3.712 14.208-14.272 3.456-3.52zM432 416v192H352v-192h80z m351.488-292.032c8.128 31.168 21.824 56.192 41.088 75.52 19.2 19.2 44.288 32.896 75.52 41.024 15.872 4.16 15.872 26.816 0 30.976-31.232 8.128-56.32 21.824-75.52 41.088-19.2 19.2-32.96 44.288-41.088 75.52-4.16 15.872-26.816 15.872-30.976 0-8.128-31.232-21.824-56.32-41.088-75.52-19.2-19.2-44.288-32.96-75.52-41.088-15.872-4.16-15.872-26.816 0-30.976 31.232-8.128 56.32-21.824 75.52-41.088 19.2-19.2 32.96-44.288 41.088-75.52 4.16-15.872 26.816-15.872 30.976 0z" fill="#666666" p-id="12775"></path></svg>
                   </div>
                 </div>
                 <div class="message-bubble">
@@ -1584,12 +1574,10 @@ const goToAdmin = () => {
                     <span class="thinking-text">正在思考...</span>
                   </div>
                   <div v-else class="message-content">
-                    <BaseCard>
-                      <MarkdownRenderer 
-                        :content="message.content" 
-                        :is-streaming="message.isStreaming"
-                      />
-                    </BaseCard>
+                    <MarkdownRenderer 
+                      :content="message.content" 
+                      :is-streaming="message.isStreaming"
+                    />
                   </div>
                   
                   <!-- AI消息操作按钮 -->
@@ -2451,7 +2439,7 @@ html, body {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 800px;
+  max-width: 900px;
 }
 
 .message-item {
@@ -2478,6 +2466,7 @@ html, body {
   line-height: 1.4;
   word-wrap: break-word;
   max-width: 80%;
+  width: fit-content;
 }
 
 .user-message .message-avatar {
@@ -2514,8 +2503,25 @@ html, body {
   max-width: calc(100% - 60px);
 }
 
+.message-content {
+  width: 100%;
+}
+
 .message-content :deep(.base-card) {
   margin: 0;
+  padding: 0;
+  box-shadow: none;
+  border: none;
+  background: transparent;
+}
+
+.message-content :deep(.base-card:hover) {
+  transform: none;
+  box-shadow: none;
+}
+
+.message-content :deep(.markdown-body) {
+  padding: 0;
 }
 
 /* 思考中动画 */
@@ -2611,10 +2617,20 @@ html, body {
 
 /* 输入区域 */
 .chat-input-area {
-  padding: 20px 40px 40px;
+  /* 核心布局 */
+  width: 100%;
+  max-width: 960px; /* 输入区域标准宽度，适配答题场景 */
+  margin: 0 auto;
+  padding: 20px 24px; /* 舒适内边距，不挤压文字 */
   flex-shrink: 0;
   display: flex;
   justify-content: center;
+  align-items: flex-end;
+  gap: 12px; /* 按钮/输入框自动间距，替代margin */
+
+  /* 视觉优化 */
+  box-sizing: border-box; /* 必备：防止padding撑宽容器 */
+  background: transparent; /* 保持原有背景，不破坏样式 */
 }
 
 .input-wrapper {
@@ -2624,7 +2640,7 @@ html, body {
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   width: 100%;
-  max-width: 800px;
+  max-width: 820px;
   margin: 0;
 }
 
