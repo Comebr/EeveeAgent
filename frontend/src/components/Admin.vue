@@ -3,16 +3,19 @@ import { ref, onMounted, onUnmounted, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import UserManagement from './user/UserManagement.vue'
+import DataOverview from './DataOverview.vue'
+import SampleManagement from './SampleManagement.vue'
 import BaseCard from './common/BaseCard.vue'
 import BaseTable from './common/BaseTable.vue'
 import BaseButton from './common/BaseButton.vue'
 import BaseForm from './common/BaseForm.vue'
 import FormField from './common/FormField.vue'
 import ScrollableContainer from './common/ScrollableContainer.vue'
+import logo from '../assets/logo.png'
 
 const router = useRouter()
 const userInfo = ref(null)
-const activeMenu = ref('knowledge') // 默认显示知识库管理
+const activeMenu = ref('overview') // 默认显示数据概览
 const searchQuery = ref('')
 const sidebarCollapsed = ref(false)
 const showUserDropdown = ref(false)
@@ -24,6 +27,18 @@ const pagination = reactive({
   current: 1,
   size: 10,
   total: 0
+})
+
+// 统计数据
+const dashboardData = ref({
+  knowledgeBaseCount: 0,
+  knowledgeBaseGrowth: 0,
+  documentCount: 0,
+  documentGrowth: 0,
+  chunkCount: 0,
+  chunkGrowth: 0,
+  userCount: 0,
+  userGrowth: 0
 })
 
 // 弹窗控制
@@ -76,7 +91,7 @@ const chunkForm = reactive({
   docId: '',
   chunkStrategy: 'recursive',
   maxChunkSize: 512,
-  maxOverlapSize: 0
+  maxOverlapSize: 24
 })
 const chunking = ref(false)
 
@@ -133,7 +148,6 @@ const documentColumns = [
   { key: 'processMode', title: '处理模式' },
   { key: 'status', title: '状态' },
   { key: 'enabled', title: '启用' },
-  { key: 'chunkCount', title: '分块数' },
   { key: 'fileType', title: '类型' },
   { key: 'fileSize', title: '大小' },
   { key: 'updateTime', title: '更新时间' },
@@ -529,7 +543,7 @@ const openChunkModal = (doc) => {
   chunkForm.docId = doc.id
   chunkForm.chunkStrategy = 'recursive'
   chunkForm.maxChunkSize = 512
-  chunkForm.maxOverlapSize = 0
+  chunkForm.maxOverlapSize = 24
   showChunkModal.value = true
 }
 
@@ -737,6 +751,28 @@ const fetchKnowledgeList = async () => {
 // 刷新知识库列表
 const refreshKnowledgeList = () => {
   fetchKnowledgeList()
+  fetchDashboardData()
+}
+
+// 获取统计数据
+const fetchDashboardData = async () => {
+  try {
+    const response = await axios.get('/api/statistics/dashboard')
+    if (response.data.code === '0') {
+      dashboardData.value = {
+        knowledgeBaseCount: response.data.data.knowledgeBaseCount,
+        knowledgeBaseGrowth: response.data.data.knowledgeBaseGrowth || 0,
+        documentCount: response.data.data.documentCount,
+        documentGrowth: response.data.data.documentGrowth || 0,
+        chunkCount: response.data.data.chunkCount,
+        chunkGrowth: response.data.data.chunkGrowth || 0,
+        userCount: response.data.data.userCount,
+        userGrowth: response.data.data.userGrowth || 0
+      }
+    }
+  } catch (error) {
+    console.error('获取统计数据失败:', error)
+  }
 }
 
 // 分页切换
@@ -847,14 +883,30 @@ const showToast = (text, type = 'success', duration = 3000) => {
   }, duration)
 }
 
-onMounted(() => {
-  // 从本地存储获取用户信息
-  const storedUserInfo = localStorage.getItem('userInfo')
-  if (storedUserInfo) {
-    userInfo.value = JSON.parse(storedUserInfo)
+// 实时获取用户信息
+const fetchUserInfo = async () => {
+  try {
+    const response = await axios.get('/api/management/current')
+    
+    if (response.data.code === '0') {
+      userInfo.value = response.data.data
+    } else {
+      // 登录失效，跳转到登录页并传递消息参数
+      router.push('/?message=登录已失效，请重新登录&messageType=info')
+    }
+  } catch (error) {
+    // 登录失效，跳转到登录页并传递消息参数
+    router.push('/?message=登录已失效，请重新登录&messageType=info')
   }
+}
+
+onMounted(() => {
+  // 实时获取用户信息
+  fetchUserInfo()
   // 获取知识库列表
   fetchKnowledgeList()
+  // 获取统计数据
+  fetchDashboardData()
 })
 
 const handleLogout = () => {
@@ -3004,6 +3056,20 @@ const copyToClipboard = (text) => {
             </span>
             <span class="menu-text" v-show="!sidebarCollapsed">意图管理</span>
           </div>
+          <div 
+            class="menu-item"
+            :class="{ active: activeMenu === 'samples' }"
+            @click="setActiveMenu('samples')"
+          >
+            <span class="menu-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                <line x1="9" y1="10" x2="15" y2="10"/>
+                <line x1="9" y1="14" x2="15" y2="14"/>
+              </svg>
+            </span>
+            <span class="menu-text" v-show="!sidebarCollapsed">示例管理</span>
+          </div>
         </div>
       </div>
       
@@ -3085,7 +3151,7 @@ const copyToClipboard = (text) => {
             <div class="user-dropdown" @click="toggleUserDropdown">
               <div class="avatar">
                 <img 
-                  v-if="userInfo?.avatar" 
+                  v-if="userInfo?.avatar && userInfo.avatar.trim()" 
                   :src="userInfo.avatar" 
                   alt="avatar"
                   @error="handleAvatarError"
@@ -3117,7 +3183,7 @@ const copyToClipboard = (text) => {
         <span class="breadcrumb-link" @click="setActiveMenu('overview')">首页</span>
         <span class="separator">/</span>
         <span v-if="activeMenu === 'knowledge' && (activeTab === 'documents' || activeTab === 'chunks')" class="breadcrumb-link" @click="activeTab = 'knowledge'">知识库管理</span>
-        <span v-else class="current">{{ activeMenu === 'overview' ? '数据概览' : activeMenu === 'knowledge' ? '知识库管理' : activeMenu === 'users' ? '用户管理' : activeMenu === 'intent' ? '意图管理' : '系统设置' }}</span>
+        <span v-else class="current">{{ activeMenu === 'overview' ? '数据概览' : activeMenu === 'knowledge' ? '知识库管理' : activeMenu === 'users' ? '用户管理' : activeMenu === 'intent' ? '意图管理' : activeMenu === 'samples' ? '示例管理' : '系统设置' }}</span>
         <span v-if="activeMenu === 'knowledge' && (activeTab === 'documents' || activeTab === 'chunks')" class="separator">/</span>
         <span v-if="activeMenu === 'knowledge' && activeTab === 'chunks'" class="breadcrumb-link" @click="activeTab = 'documents'">文档管理</span>
         <span v-else-if="activeMenu === 'knowledge' && activeTab === 'documents'" class="current">文档管理</span>
@@ -3129,8 +3195,7 @@ const copyToClipboard = (text) => {
       <div class="content-area">
         <!-- 这里根据activeMenu显示不同的内容 -->
         <div v-if="activeMenu === 'overview'" class="page-content">
-          <h2>数据概览</h2>
-          <p>欢迎使用 Eevee 管理后台</p>
+          <DataOverview />
         </div>
         <div v-else-if="activeMenu === 'intent'" class="page-content intent-page">
           <!-- 页面标题 -->
@@ -3874,66 +3939,39 @@ const copyToClipboard = (text) => {
             </div>
             
             <!-- 数据卡片 -->
-            <div class="data-cards">
-              <BaseCard>
-                <template #default>
-                  <div class="card-content">
-                    <div class="card-icon">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="4" y="4" width="16" height="16" rx="2" ry="2"/>
-                        <line x1="8" y1="8" x2="16" y2="8"/>
-                        <line x1="8" y1="12" x2="16" y2="12"/>
-                        <line x1="8" y1="16" x2="12" y2="16"/>
-                      </svg>
-                    </div>
-                    <div class="card-value">{{ pagination.total }}</div>
-                    <div class="card-label">知识库</div>
-                  </div>
-                </template>
-              </BaseCard>
-              <BaseCard>
-                <template #default>
-                  <div class="card-content">
-                    <div class="card-icon">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                      </svg>
-                    </div>
-                    <div class="card-value">0</div>
-                    <div class="card-label">文档数</div>
-                  </div>
-                </template>
-              </BaseCard>
-              <BaseCard>
-                <template #default>
-                  <div class="card-content">
-                    <div class="card-icon">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="12" y1="8" x2="12" y2="12"/>
-                        <line x1="12" y1="16" x2="12.01" y2="16"/>
-                      </svg>
-                    </div>
-                    <div class="card-value">{{ pagination.total }}</div>
-                    <div class="card-label">定义组标准</div>
-                  </div>
-                </template>
-              </BaseCard>
-              <BaseCard>
-                <template #default>
-                  <div class="card-content">
-                    <div class="card-icon">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                        <circle cx="9" cy="7" r="4"/>
-                      </svg>
-                    </div>
-                    <div class="card-value">1</div>
-                    <div class="card-label">创建用户数</div>
-                  </div>
-                </template>
-              </BaseCard>
+            <div class="data-cards" style="margin-bottom: 24px;">
+              <div class="card">
+                <div class="card-icon knowledge-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+                </div>
+                <div class="card-content">
+                  <div class="card-title">知识库数量</div>
+                  <div class="card-value">{{ dashboardData.knowledgeBaseCount }}</div>
+                  <div class="card-change positive">{{ (dashboardData.knowledgeBaseGrowth || 0).toFixed(3) }}% 增长</div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-icon document-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                <div class="card-content">
+                  <div class="card-title">文档数量</div>
+                  <div class="card-value">{{ dashboardData.documentCount }}</div>
+                  <div class="card-change positive">{{ (dashboardData.documentGrowth || 0).toFixed(3) }}% 增长</div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-icon chunk-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                </div>
+                <div class="card-content">
+                  <div class="card-title">知识块数量</div>
+                  <div class="card-value">{{ dashboardData.chunkCount }}</div>
+                  <div class="card-change positive">{{ (dashboardData.chunkGrowth || 0).toFixed(3) }}% 增长</div>
+                </div>
+              </div>
             </div>
             
             <!-- 知识库表格 -->
@@ -4061,9 +4099,6 @@ const copyToClipboard = (text) => {
                       <span class="slider"></span>
                     </label>
                   </template>
-                  <template #chunkCount="{ row }">
-                    <a href="#" class="kb-name-link" @click.prevent="navigateToChunks(row)">{{ row.chunkCount || 0 }}</a>
-                  </template>
                   <template #fileType="{ row }">
                     <span class="file-type-tag">{{ getMimeTypeSubtype(row.fileType) }}</span>
                   </template>
@@ -4117,12 +4152,6 @@ const copyToClipboard = (text) => {
                     <path d="M19 12H5M12 19l-7-7 7-7"/>
                   </svg>
                   返回文档
-                </button>
-                <button class="btn-rebuild btn-hover-effect">
-                  <svg width="16" height="16" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M524.8 106.666667c-106.666667 0-209.066667 42.666667-285.866667 110.933333l-8.533333-68.266667c0-25.6-21.333333-42.666667-46.933333-38.4-25.6 0-42.666667 21.333333-38.4 46.933334l8.533333 115.2c4.266667 55.466667 51.2 98.133333 106.666667 98.133333h8.533333L384 362.666667c25.6 0 42.666667-21.333333 38.4-46.933334 0-25.6-21.333333-42.666667-46.933333-38.4l-85.333334 4.266667c64-55.466667 145.066667-89.6 230.4-89.6 187.733333 0 341.333333 153.6 341.333334 341.333333s-153.6 341.333333-341.333334 341.333334-341.333333-153.6-341.333333-341.333334c0-25.6-17.066667-42.666667-42.666667-42.666666s-42.666667 17.066667-42.666666 42.666666c0 234.666667 192 426.666667 426.666666 426.666667s426.666667-192 426.666667-426.666667c4.266667-234.666667-187.733333-426.666667-422.4-426.666666z" fill="currentColor"/>
-                  </svg>
-                  重建分块
                 </button>
                 <button class="add-button btn-hover-effect" @click="openCreateChunkModal">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4236,6 +4265,9 @@ const copyToClipboard = (text) => {
         </div>
         <div v-else-if="activeMenu === 'users'" class="page-content user-page">
           <UserManagement />
+        </div>
+        <div v-else-if="activeMenu === 'samples'" class="page-content">
+          <SampleManagement @back="setActiveMenu('overview')" />
         </div>
         <div v-else-if="activeMenu === 'settings'" class="page-content">
           <h2>系统设置</h2>
@@ -4616,6 +4648,89 @@ const copyToClipboard = (text) => {
 </template>
 
 <style scoped>
+/* 数据卡片样式 */
+.data-cards {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  width: 300px;
+  flex-shrink: 0;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 16px;
+  color: white;
+}
+
+.knowledge-icon {
+  background: linear-gradient(135deg, #1890ff, #36cfc9);
+}
+
+.document-icon {
+  background: linear-gradient(135deg, #faad14, #fadb14);
+}
+
+.chunk-icon {
+  background: linear-gradient(135deg, #52c41a, #73d13d);
+}
+
+.user-icon {
+  background: linear-gradient(135deg, #722ed1, #9254de);
+}
+
+.card-content {
+  flex: 1;
+}
+
+.card-title {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.card-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.card-change {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.card-change.positive {
+  color: #52c41a;
+}
+
+.card-change.negative {
+  color: #ff4d4f;
+}
+
+/* 原有样式 */
 * {
   margin: 0;
   padding: 0;
