@@ -34,8 +34,8 @@ axios.interceptors.response.use(
       // 清除本地存储
       localStorage.removeItem('token')
       localStorage.removeItem('userInfo')
-      // 跳转到登录页
-      window.location.href = '/'
+      // 跳转到登录页并传递消息参数
+      window.location.href = '/?message=登录已失效，请重新登录&messageType=info'
     }
     return Promise.reject(error)
   }

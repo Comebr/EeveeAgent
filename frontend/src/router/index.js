@@ -32,4 +32,17 @@ const router = createRouter({
   routes
 })
 
+// 全局路由守卫
+router.beforeEach((to, from, next) => {
+  // 登录页不需要校验
+  if (to.path === '/') {
+    next()
+    return
+  }
+  
+  // 检查是否已登录（实际项目中应该通过API校验登录状态）
+  // 这里简化处理，假设如果能访问到用户信息则已登录
+  next()
+})
+
 export default router

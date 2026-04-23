@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import MarkdownRenderer from './MarkdownRenderer.vue'
 import BaseButton from './common/BaseButton.vue'
+import logo from '../assets/logo.png'
 
 const router = useRouter()
 const userInfo = ref(null)
@@ -49,6 +50,7 @@ const messageMenuPosition = ref({ x: 0, y: 0 })
 // 聊天相关状态
 const inputText = ref('')
 const isLoading = ref(false)
+const isInputFocused = ref(false) // 输入框焦点状态
 const chatContentRef = ref(null)
 const autoScroll = ref(true) // 自动滚动标志
 const showScrollButton = ref(false) // 是否显示回到底部的按钮
@@ -109,37 +111,24 @@ const currentRequestId = computed({
 // 实时获取用户信息
 const fetchUserInfo = async () => {
   try {
-    console.log('开始获取用户信息')
     const response = await axios.get('/api/management/current')
-    console.log('获取用户信息响应:', response.data)
     
     if (response.data.code === '0') {
       userInfo.value = response.data.data
-      console.log('获取到用户信息:', userInfo.value)
-      // 更新本地存储
-      localStorage.setItem('userInfo', JSON.stringify(response.data.data))
-      localStorage.setItem('userId', response.data.data.userId)
-      console.log('已更新本地存储，userId:', response.data.data.userId)
     } else {
-      console.error('获取用户信息失败，错误码:', response.data.code)
+      // 登录失效，跳转到登录页并传递消息参数
+      router.push('/?message=登录已失效，请重新登录&messageType=info')
     }
   } catch (error) {
-    console.error('获取用户信息失败:', error)
-    // 如果获取失败，尝试从本地存储获取
-    const storedUserInfo = localStorage.getItem('userInfo')
-    console.log('尝试从本地存储获取用户信息:', storedUserInfo)
-    if (storedUserInfo) {
-      userInfo.value = JSON.parse(storedUserInfo)
-      console.log('从本地存储获取到用户信息:', userInfo.value)
-      localStorage.setItem('userId', userInfo.value.userId)
-    }
+    // 登录失效，跳转到登录页并传递消息参数
+    router.push('/?message=登录已失效，请重新登录&messageType=info')
   }
 }
 
 // 滚动到聊天底部
-const scrollToBottom = async () => {
+const scrollToBottom = async (force = false) => {
   await nextTick()
-  if (chatContentRef.value && autoScroll.value) {
+  if (chatContentRef.value && (autoScroll.value || force)) {
     chatContentRef.value.scrollTop = chatContentRef.value.scrollHeight
   }
 }
@@ -148,11 +137,12 @@ const scrollToBottom = async () => {
 const handleScroll = () => {
   if (chatContentRef.value) {
     const { scrollTop, scrollHeight, clientHeight } = chatContentRef.value
-    // 当滚动位置离底部超过10px时，认为用户在查看历史内容，禁用自动滚动
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight
+    // 当滚动位置离底部超过5px时，认为用户在查看历史内容，禁用自动滚动
     // 减小阈值，使autoScroll更快地被禁用，减少抖动
-    autoScroll.value = scrollHeight - scrollTop - clientHeight < 10
+    autoScroll.value = distanceToBottom < 5
     // 当不在底部时显示回到底部的按钮
-    showScrollButton.value = scrollHeight - scrollTop - clientHeight >= 10
+    showScrollButton.value = distanceToBottom >= 5
   }
 }
 
@@ -173,7 +163,7 @@ const sendMessage = async () => {
     const newConversation = {
       id: tempConversationId,
       conversationId: tempConversationId,
-      userId: userInfo.value?.userId || localStorage.getItem('userId'),
+      userId: userInfo.value?.userId,
       title: '新会话',
       lastTalkTime: new Date(),
       delFlag: 0,
@@ -206,8 +196,8 @@ const sendMessage = async () => {
   sessionState.messages.push(userMessage)
   inputText.value = ''
   
-  // 滚动到底部
-  await scrollToBottom()
+  // 滚动到底部（强制）
+  await scrollToBottom(true)
   
   // 添加AI正在思考的消息
   const aiThinkingMessage = {
@@ -219,12 +209,10 @@ const sendMessage = async () => {
   }
   sessionState.messages.push(aiThinkingMessage)
   
-  // 滚动到底部
-  await scrollToBottom()
+  // 滚动到底部（强制）
+  await scrollToBottom(true)
   
   try {
-    const token = localStorage.getItem('token')
-    
     // 由于 SSE 只支持 GET 请求，我们需要将参数作为查询参数传递
     const openThinking = deepThinking.value
     // 生成请求ID用于停止功能
@@ -272,6 +260,9 @@ const sendMessage = async () => {
                   scrollToBottom()
                 }
               })
+            } else {
+              // 缓冲区已处理完但流式传输未结束，继续等待新数据
+              outputTimer = setTimeout(processChunk, 50)
             }
             return
           }
@@ -324,12 +315,6 @@ const sendMessage = async () => {
         
         // 开始处理
         processChunk()
-        
-        // 存储定时器以便清理
-        if (!window.__chatTimers) {
-          window.__chatTimers = []
-        }
-        window.__chatTimers.push(outputTimer)
       }
     
     // 处理 init 事件，获取会话ID
@@ -372,7 +357,7 @@ const sendMessage = async () => {
           }
         }
       } catch (error) {
-        console.error('处理init事件失败:', error)
+        // 静默处理错误
       }
     })
     
@@ -392,6 +377,7 @@ const sendMessage = async () => {
         
         // 非JSON数据，添加到buffer
         buffer += event.data
+        displayContent = buffer // 确保displayContent与buffer同步
         
         // 如果是首次收到数据，启动输出
         if (firstDataReceived && !outputTimer) {
@@ -400,7 +386,6 @@ const sendMessage = async () => {
       }
       
       eventSource.onerror = (error) => {
-        console.error('SSE连接错误:', error)
         eventSource.close()
         isComplete = true
         sessionState.isStreaming = false
@@ -408,7 +393,7 @@ const sendMessage = async () => {
         const checkBuffer = () => {
           if (buffer.length === 0) {
             if (outputTimer) {
-              clearInterval(outputTimer)
+              clearTimeout(outputTimer)
               outputTimer = null
             }
             const msgIndex = sessionState.messages.findIndex(msg => msg.id === aiThinkingMessage.id)
@@ -417,7 +402,7 @@ const sendMessage = async () => {
               sessionState.messages[msgIndex] = {
                 ...sessionState.messages[msgIndex],
                 isStreaming: false,
-                content: displayContent
+                content: buffer
               }
             }
           } else {
@@ -444,77 +429,76 @@ const sendMessage = async () => {
       }
       
       eventSource.addEventListener('close', () => {
-    eventSource.close()
-    isComplete = true
-    sessionState.isStreaming = false
-    // 等待缓冲区数据处理完成后再标记流式传输结束
-    const checkBuffer = () => {
-      if (buffer.length === 0) {
-        if (outputTimer) {
-          clearInterval(outputTimer)
-          outputTimer = null
-        }
-        const msgIndex = sessionState.messages.findIndex(msg => msg.id === aiThinkingMessage.id)
-        if (msgIndex !== -1) {
-          // 一次性更新最终内容，确保代码高亮和语言显示正确
-          sessionState.messages[msgIndex] = {
-            ...sessionState.messages[msgIndex],
-            isStreaming: false,
-            content: displayContent
-          }
-        }
-        
-        // 检查是否是新会话且已收到conversationId
-        if (receivedConversationId && !currentConversationId.value) {
-          currentConversationId.value = receivedConversationId
-          
-          // 更新会话状态Map中的键
-          if (currentSessionId.includes('temp')) {
-            sessionStates.value.set(receivedConversationId, sessionState)
-            sessionStates.value.delete(currentSessionId)
-          }
-          
-          // 查找并更新临时会话
-          const tempConversationIndex = conversations.value.findIndex(c => c.isTemp === true)
-          if (tempConversationIndex !== -1) {
-            // 更新临时会话为真实会话
-            conversations.value[tempConversationIndex] = {
-              ...conversations.value[tempConversationIndex],
-              id: receivedConversationId,
-              conversationId: receivedConversationId,
-              isTemp: false
+        eventSource.close()
+        isComplete = true
+        sessionState.isStreaming = false
+        // 等待缓冲区数据处理完成后再标记流式传输结束
+        const checkBuffer = () => {
+          if (buffer.length === 0) {
+            if (outputTimer) {
+              clearTimeout(outputTimer)
+              outputTimer = null
+            }
+            const msgIndex = sessionState.messages.findIndex(msg => msg.id === aiThinkingMessage.id)
+            if (msgIndex !== -1) {
+              // 一次性更新最终内容，确保代码高亮和语言显示正确
+              sessionState.messages[msgIndex] = {
+                ...sessionState.messages[msgIndex],
+                isStreaming: false,
+                content: buffer
+              }
+            }
+            
+            // 检查是否是新会话且已收到conversationId
+            if (receivedConversationId && !currentConversationId.value) {
+              currentConversationId.value = receivedConversationId
+              
+              // 更新会话状态Map中的键
+              if (currentSessionId.includes('temp')) {
+                sessionStates.value.set(receivedConversationId, sessionState)
+                sessionStates.value.delete(currentSessionId)
+              }
+              
+              // 查找并更新临时会话
+              const tempConversationIndex = conversations.value.findIndex(c => c.isTemp === true)
+              if (tempConversationIndex !== -1) {
+                // 更新临时会话为真实会话
+                conversations.value[tempConversationIndex] = {
+                  ...conversations.value[tempConversationIndex],
+                  id: receivedConversationId,
+                  conversationId: receivedConversationId,
+                  isTemp: false
+                }
+              } else {
+                // 如果没有临时会话，创建新会话
+                const newConversation = {
+                  id: receivedConversationId,
+                  conversationId: receivedConversationId,
+                  userId: userInfo.value?.userId || localStorage.getItem('userId'),
+                  title: '新对话',
+                  lastTalkTime: new Date(),
+                  delFlag: 0
+                }
+                conversations.value.unshift(newConversation)
+              }
+            }
+            
+            // 主动获取后端生成的标题
+            if (receivedConversationId) {
+              // 等待后端生成标题（给后端一些时间处理）
+              setTimeout(() => {
+                fetchConversationTitle(receivedConversationId)
+              }, 1000)
             }
           } else {
-            // 如果没有临时会话，创建新会话
-            const newConversation = {
-              id: receivedConversationId,
-              conversationId: receivedConversationId,
-              userId: userInfo.value?.userId || localStorage.getItem('userId'),
-              title: '新对话',
-              lastTalkTime: new Date(),
-              delFlag: 0
-            }
-            conversations.value.unshift(newConversation)
+            // 继续等待缓冲区处理
+            setTimeout(checkBuffer, 50)
           }
         }
-        
-        // 主动获取后端生成的标题
-        if (receivedConversationId) {
-          // 等待后端生成标题（给后端一些时间处理）
-          setTimeout(() => {
-            fetchConversationTitle(receivedConversationId)
-          }, 1000)
-        }
-      } else {
-        // 继续等待缓冲区处理
-        setTimeout(checkBuffer, 50)
-      }
-    }
-    checkBuffer()
-  })
+        checkBuffer()
+      })
     
   } catch (error) {
-    console.error('聊天请求失败:', error)
     sessionState.messages = sessionState.messages.filter(msg => !msg.isThinking)
     sessionState.messages.push({
       id: Date.now() + 3,
@@ -561,8 +545,6 @@ const regenerateResponse = async (message) => {
     
     // 直接发送请求，不添加新消息
     try {
-      const token = localStorage.getItem('token')
-      
       // 由于 SSE 只支持 GET 请求，我们需要将参数作为查询参数传递
       const openThinking = deepThinking.value
       let url = `/agent/rag/streamingChat?prompt=${encodeURIComponent(lastUserMessage.content)}&openThinking=${openThinking}`
@@ -701,7 +683,6 @@ const regenerateResponse = async (message) => {
       }
       
       eventSource.onerror = (error) => {
-        console.error('SSE连接错误:', error)
         eventSource.close()
         isComplete = true
         sessionState.isStreaming = false
@@ -775,7 +756,6 @@ const regenerateResponse = async (message) => {
       })
       
     } catch (error) {
-      console.error('聊天请求失败:', error)
       const msgIndex = sessionState.messages.findIndex(msg => msg.id === message.id)
       if (msgIndex !== -1) {
         sessionState.messages[msgIndex] = {
@@ -850,6 +830,88 @@ const handleKeyPress = (event) => {
   }
 }
 
+// 处理粘贴事件，保留格式并剥离富文本样式
+const handlePaste = (event) => {
+  event.preventDefault()
+  
+  // 获取粘贴的内容
+  const clipboardData = event.clipboardData || window.clipboardData
+  let pastedText = clipboardData.getData('text')
+  
+  // 检查粘贴文本长度，超过2000则截断
+  let isTruncated = false
+  if (pastedText.length > 2000) {
+    pastedText = pastedText.substring(0, 2000)
+    isTruncated = true
+  }
+  
+  // 保留换行和空格，剥离富文本样式，清洗多余空行
+  const cleanedText = cleanExcessEmptyLines(pastedText)
+  
+  // 计算最终文本长度，确保不超过2000
+  const input = event.target
+  const startPos = input.selectionStart
+  const endPos = input.selectionEnd
+  const textBefore = inputText.value.substring(0, startPos)
+  const textAfter = inputText.value.substring(endPos)
+  
+  // 计算剩余可输入长度
+  const remainingLength = 2000 - (textBefore.length + textAfter.length)
+  const finalText = textBefore + (cleanedText.length > remainingLength ? cleanedText.substring(0, remainingLength) : cleanedText) + textAfter
+  
+  inputText.value = finalText
+  
+  // 显示截断提示
+  if (isTruncated || cleanedText.length > remainingLength) {
+    showToast('内容过长，已自动截断', 'warning')
+  }
+  
+  // 光标定位到粘贴内容之后
+  setTimeout(() => {
+    const newCursorPos = startPos + Math.min(cleanedText.length, remainingLength)
+    input.selectionStart = input.selectionEnd = newCursorPos
+    // 调整textarea高度
+    adjustTextareaHeight(input)
+  }, 0)
+}
+
+// 处理输入事件，限制输入长度
+const handleInput = (e) => {
+  const textarea = e.target
+  
+  // 限制输入长度为2000
+  if (inputText.value.length > 2000) {
+    inputText.value = inputText.value.substring(0, 2000)
+    showToast('内容已达最大长度限制', 'warning')
+  }
+  
+  // 调整textarea高度
+  adjustTextareaHeight(textarea)
+}
+
+// 自动调整textarea高度
+const adjustTextareaHeight = (textarea) => {
+  textarea.style.height = 'auto'
+  textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px'
+}
+
+// 计算有效字数（过滤空行和首尾空白）
+const getEffectiveCharCount = (text) => {
+  if (!text) return 0
+  // 过滤空行和首尾空白，只算有效文本
+  const lines = text.split('\n')
+  const validLines = lines.filter(line => line.trim() !== '')
+  const validText = validLines.join('\n')
+  return validText.length
+}
+
+// 清洗多余空行（保留排版，去除连续空行）
+const cleanExcessEmptyLines = (text) => {
+  if (!text) return ''
+  // 替换连续的空行为单个空行
+  return text.replace(/\n{3,}/g, '\n\n').trim()
+}
+
 // 暂停流式输出
 const pauseStreaming = () => {
   const sessionState = getCurrentSessionState()
@@ -863,6 +925,12 @@ const pauseStreaming = () => {
 const scrollToBottomManually = async () => {
   autoScroll.value = true
   showScrollButton.value = false
+  if (chatContentRef.value) {
+    chatContentRef.value.scrollTo({
+      top: chatContentRef.value.scrollHeight,
+      behavior: 'smooth'
+    })
+  }
   await scrollToBottom()
 }
 
@@ -873,6 +941,37 @@ const deepThinking = ref(false)
 
 const toggleDeepThinking = () => {
   deepThinking.value = !deepThinking.value
+}
+
+// 示例问题相关状态
+const sampleQuestions = ref([])
+const isLoadingSampleQuestions = ref(false)
+
+// 获取示例问题
+const fetchSampleQuestions = async () => {
+  isLoadingSampleQuestions.value = true
+  try {
+    const response = await axios.get('/example/rag/sample-questions')
+    if (response.data.code === '0') {
+      sampleQuestions.value = response.data.data
+    }
+  } catch (error) {
+    console.error('获取示例问题失败:', error)
+  } finally {
+    isLoadingSampleQuestions.value = false
+  }
+}
+
+// 选择示例问题
+const selectSampleQuestion = (question) => {
+  inputText.value = question.question
+  // 调整textarea高度
+  const textarea = document.querySelector('textarea')
+  if (textarea) {
+    adjustTextareaHeight(textarea)
+  }
+  // 滚动到输入框
+  textarea?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
 // 会话管理相关函数
@@ -887,11 +986,9 @@ const fetchConversations = async (isSilent = false) => {
       await fetchUserInfo()
     }
     
-    const userId = userInfo.value?.userId || localStorage.getItem('userId')
-    console.log('获取会话列表，userId:', userId)
+    const userId = userInfo.value?.userId
     
     if (!userId) {
-      console.error('用户ID不存在，无法获取会话列表')
       if (!isSilent) {
         showToast('用户未登录，无法获取会话列表', 'error')
       }
@@ -903,22 +1000,17 @@ const fetchConversations = async (isSilent = false) => {
       params: { userId }
     })
     
-    console.log('获取会话列表响应:', response.data)
-    
     if (response.data.code === '0') {
       conversations.value = response.data.data
-      console.log('会话列表数据:', conversations.value)
       if (!isSilent) {
         showToast('会话列表已更新', 'success')
       }
     } else {
-      console.error('获取会话列表失败，错误码:', response.data.code)
       if (!isSilent) {
         showToast('获取会话列表失败', 'error')
       }
     }
   } catch (error) {
-    console.error('获取会话列表失败:', error)
     if (!isSilent) {
       showToast('获取会话列表失败，将自动重试', 'error')
     }
@@ -1066,7 +1158,7 @@ const deleteMessage = async (message) => {
 const fetchConversationTitle = async (conversationId) => {
   try {
     const response = await axios.get(`/conversation/list`, {
-      params: { userId: userInfo.value?.userId || localStorage.getItem('userId') }
+      params: { userId: userInfo.value?.userId }
     })
     
     if (response.data.code === '0') {
@@ -1185,11 +1277,7 @@ onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
   
   // 登录成功后显示消息
-const showLoginSuccess = localStorage.getItem('showLoginSuccess') === 'true'
-if (showLoginSuccess) {
-  showToast('已成功登录', 'success')
-  localStorage.removeItem('showLoginSuccess')
-}
+// 不再使用localStorage存储登录状态
   
   // 智能隐藏侧边栏相关事件
   document.addEventListener('click', handleClick)
@@ -1200,6 +1288,9 @@ if (showLoginSuccess) {
   
   // 获取会话列表（首次进入全量拉取）
   fetchConversations()
+  
+  // 获取示例问题
+  fetchSampleQuestions()
 })
 
 onUnmounted(() => {
@@ -1231,10 +1322,6 @@ const handleClickOutside = (event) => {
 }
 
 const handleLogout = () => {
-  // 清除本地存储
-  localStorage.removeItem('token')
-  localStorage.removeItem('userInfo')
-  localStorage.setItem('showLogoutSuccess', 'true')
   // 跳转到登录页
   window.location.href = '/'
 }
@@ -1393,10 +1480,7 @@ const goToAdmin = () => {
       <div class="sidebar-header">
         <div class="logo">
           <div class="logo-icon">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-              <rect width="32" height="32" rx="8" fill="#667eea"/>
-              <path d="M8 12h16M8 16h12M8 20h8" stroke="white" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+            <img :src="logo" width="64" height="64" alt="EeveeAgent Logo" style="object-fit: contain; border-radius: 8px;"/>
           </div>
           <span class="logo-text" v-show="!sidebarCollapsed">EeveeAgent</span>
         </div>
@@ -1539,9 +1623,27 @@ const goToAdmin = () => {
           </button>
           <!-- 消息列表 -->
           <div v-if="messages.length === 0" class="welcome-message">
-            <div class="welcome-text">
-              <p class="greeting">你好，{{ userInfo?.username || 'MOMO' }}</p>
-              <p class="question">今天需要我帮你做点什么吗？</p>
+            <div class="welcome-content">
+              <h1 class="welcome-title">有什么我能帮你的吗？</h1>
+              
+              <!-- 热门问题标签 -->
+              <div class="hot-questions-container">
+                <div 
+                  v-for="(question, index) in sampleQuestions" 
+                  :key="index"
+                  class="hot-question-tag"
+                  @click="selectSampleQuestion(question)"
+                >
+                  {{ question.question }}
+                </div>
+                <div v-if="isLoadingSampleQuestions" class="loading-hot-questions">
+                  <div class="loading-spinner"></div>
+                  <span>加载中...</span>
+                </div>
+                <div v-if="!isLoadingSampleQuestions && sampleQuestions.length === 0" class="no-hot-questions">
+                  <span>暂无热门问题</span>
+                </div>
+              </div>
             </div>
           </div>
           
@@ -1581,7 +1683,7 @@ const goToAdmin = () => {
                   </div>
                   
                   <!-- AI消息操作按钮 -->
-                  <div v-if="!message.isThinking" class="message-actions">
+                  <div v-if="!message.isThinking && !message.isStreaming" class="message-actions">
                     <button class="action-btn" title="重新生成" @click="regenerateResponse(message)">
                       <svg width="16" height="16" viewBox="0 0 1024 1024" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M935.005091 459.752727a34.909091 34.909091 0 1 1 49.361454 49.361455l-78.382545 78.382545a34.816 34.816 0 0 1-49.338182 0l-78.405818-78.382545a34.909091 34.909091 0 1 1 49.361455-49.361455l14.801454 14.824728C818.525091 311.738182 678.330182 186.181818 508.928 186.181818c-130.466909 0-250.484364 76.706909-305.710545 195.397818a34.932364 34.932364 0 0 1-63.301819-29.463272C206.522182 208.896 351.418182 116.363636 508.904727 116.363636c210.152727 0 383.534545 159.953455 404.992 364.474182l21.085091-21.085091z m-73.960727 189.021091a34.932364 34.932364 0 0 1 16.965818 46.382546C811.310545 838.353455 666.461091 930.909091 508.951273 930.909091c-210.106182 0-383.534545-159.953455-404.968728-364.497455l-21.108363 21.108364a34.909091 34.909091 0 1 1-49.384727-49.361455l78.42909-78.42909a34.909091 34.909091 0 0 1 49.338182 0l78.382546 78.42909a34.909091 34.909091 0 1 1-49.338182 49.338182l-14.824727-14.801454C199.354182 735.534545 339.549091 861.090909 508.951273 861.090909c130.490182 0 250.507636-76.706909 305.710545-195.397818a34.909091 34.909091 0 0 1 46.382546-16.919273z" fill="#797979" p-id="5070"></path>
@@ -1622,14 +1724,19 @@ const goToAdmin = () => {
         
         <!-- 输入区域 -->
         <div class="chat-input-area">
-          <div class="input-wrapper">
-            <input 
-              type="text" 
+          <div class="input-wrapper" :class="{ 'input-focused': isInputFocused }">
+            <textarea 
               v-model="inputText" 
               placeholder="请输入内容..." 
               @keypress="handleKeyPress"
+              @paste="handlePaste"
+              @input="handleInput"
+              @focus="isInputFocused = true"
+              @blur="isInputFocused = false"
               :disabled="isLoading"
-            />
+              rows="1"
+              class="chat-textarea"
+            ></textarea>
             <div class="input-actions">
               <!-- 深度思考按钮 -->
               <button 
@@ -1642,28 +1749,33 @@ const goToAdmin = () => {
                 </svg>
                 <span>深度思考</span>
               </button>
-              <div class="char-count">{{ inputText.length }}/200</div>
-              <button 
-                v-if="!isStreaming" 
-                class="send-button" 
-                @click="sendMessage"
-                :disabled="isLoading || !inputText.trim()"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="22" y1="2" x2="11" y2="13"/>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
-              </button>
-              <button 
-                v-else 
-                class="pause-button" 
-                @click="pauseStreaming"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="6" y="4" width="4" height="16"/>
-                  <rect x="14" y="4" width="4" height="16"/>
-                </svg>
-              </button>
+
+              <div class="send-button-container">
+                <div class="char-count" :class="{ 'limit-exceeded': inputText.length > 2000 }">
+                  {{ inputText.length }}/2000
+                </div>
+                <button 
+                  v-if="!isStreaming" 
+                  class="send-button" 
+                  @click="sendMessage"
+                  :disabled="isLoading || !inputText.trim()"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13"/>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                  </svg>
+                </button>
+                <button 
+                  v-else 
+                  class="pause-button" 
+                  @click="pauseStreaming"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="6" y="4" width="4" height="16"/>
+                    <rect x="14" y="4" width="4" height="16"/>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1726,6 +1838,12 @@ html, body {
   background-color: #eff6ff;
   border: 1px solid #dbeafe;
   color: #1d4ed8;
+}
+
+.toast-message.warning {
+  background-color: #fffbeb;
+  border: 1px solid #fef3c7;
+  color: #92400e;
 }
 
 .toast-content {
@@ -1797,7 +1915,7 @@ html, body {
 .logo {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 2px;
 }
 
 .logo-icon {
@@ -2396,6 +2514,7 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  position: relative;
   /* 隐藏滚动条 */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
@@ -2413,6 +2532,7 @@ html, body {
   justify-content: center;
   height: 100%;
   text-align: center;
+  padding: 40px 20px;
 }
 
 .robot-icon {
@@ -2432,6 +2552,88 @@ html, body {
 .question {
   font-size: 16px;
   color: #666;
+  margin-bottom: 40px;
+}
+
+/* 欢迎页面样式 */
+.welcome-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-width: 800px;
+  width: 100%;
+  padding: 0 20px;
+}
+
+.welcome-title {
+  font-size: 32px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+/* 热门问题标签样式 */
+.hot-questions-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  width: 100%;
+  margin-top: 20px;
+}
+
+.hot-question-tag {
+  background-color: #f5f5f5;
+  color: #333;
+  border-radius: 18px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid #e0e0e0;
+}
+
+.hot-question-tag:hover {
+  background-color: #f8f9fa;
+  border-color: #e0e0e0;
+  color: #333;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.loading-hot-questions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #666;
+  width: 100%;
+}
+
+.loading-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.no-hot-questions {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+  font-size: 14px;
+  width: 100%;
 }
 
 /* 消息列表 */
@@ -2458,8 +2660,8 @@ html, body {
 }
 
 .user-message .message-content {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: linear-gradient(135deg, #e8e8ef 0%, #f0f3ed 100%);
+  color: black;
   padding: 12px 16px;
   border-radius: 18px 18px 4px 18px;
   font-size: 14px;
@@ -2634,17 +2836,40 @@ html, body {
 }
 
 .input-wrapper {
-  background-color: white;
-  border: 1px solid #e0e0e0;
+  background: linear-gradient(to bottom, rgba(248, 249, 250, 0.8), rgba(255, 255, 255, 0.2));
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(224, 224, 224, 0.3);
   border-radius: 12px;
   padding: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   width: 100%;
   max-width: 820px;
   margin: 0;
+  transition: all 0.3s ease;
+  position: relative;
 }
 
-.input-wrapper input {
+.input-wrapper::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to top, rgba(248, 249, 250, 0.9), rgba(248, 249, 250, 0.1));
+  border-radius: 12px;
+  z-index: -1;
+  opacity: 0.8;
+}
+
+.input-wrapper.input-focused {
+  border-color: rgba(100, 149, 237, 0.6);
+  box-shadow: 0 0 0 2px rgba(100, 149, 237, 0.2), 0 4px 12px rgba(100, 149, 237, 0.15);
+  background: linear-gradient(to bottom, rgba(248, 249, 250, 0.95), rgba(255, 255, 255, 0.4));
+}
+
+.input-wrapper input,
+.input-wrapper textarea {
   width: 100%;
   border: none;
   outline: none;
@@ -2652,30 +2877,54 @@ html, body {
   padding: 8px 0;
   margin-bottom: 12px;
   color: #1a1a1a;
+  font-family: inherit;
+  resize: none;
+  overflow: auto;
+  min-height: 24px;
+  max-height: 200px;
+  background-color: transparent;
 }
 
-.input-wrapper input::placeholder {
+.input-wrapper input::placeholder,
+.input-wrapper textarea::placeholder {
   color: #999;
+}
+
+.chat-textarea {
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .input-actions {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   flex-wrap: nowrap;
   width: 100%;
+}
+
+.send-button-container {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .char-count {
   font-size: 12px;
   color: #999;
   white-space: nowrap;
-  margin-left: auto;
-  order: 2;
+  margin: 0;
+}
+
+.char-count.limit-exceeded {
+  color: #ff4d4f;
+  font-weight: 500;
 }
 
 .send-button {
-  order: 3;
   width: 36px;
   height: 36px;
   border: none;
@@ -2695,7 +2944,6 @@ html, body {
 }
 
 .pause-button {
-  order: 3;
   width: 36px;
   height: 36px;
   border: none;
@@ -2714,34 +2962,54 @@ html, body {
   box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
 }
 
-.deep-thinking-button {
-  order: 1;
-}
+
 
 /* 回到底部按钮 */
 .scroll-to-bottom-button {
   position: fixed;
   bottom: 100px;
   right: 40px;
-  width: 48px;
-  height: 48px;
-  border: 2px solid #000;
+  width: 36px;
+  height: 36px;
+  border: none;
   border-radius: 50%;
-  background-color: white;
-  color: black;
+  background-color: rgba(224, 224, 224, 0.8);
+  color: #333;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   z-index: 99;
 }
 
 .scroll-to-bottom-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  background-color: #f5f5f5;
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background-color: rgba(192, 192, 192, 0.9);
+}
+
+.scroll-to-bottom-button svg {
+  width: 16px;
+  height: 16px;
+  stroke: #333;
+}
+
+/* 深色模式适配 */
+@media (prefers-color-scheme: dark) {
+  .scroll-to-bottom-button {
+    background-color: rgba(64, 64, 64, 0.8);
+    color: #e0e0e0;
+  }
+  
+  .scroll-to-bottom-button:hover {
+    background-color: rgba(80, 80, 80, 0.9);
+  }
+  
+  .scroll-to-bottom-button svg {
+    stroke: #e0e0e0;
+  }
 }
 
 /* 响应式设计 */
