@@ -1,6 +1,6 @@
 package com.azheng.boot.kb.controller.request;
 
-import com.azheng.boot.rag.chunking.ChunkOptions;
+import com.azheng.boot.rag.core.chunking.ChunkOptions;
 import lombok.Data;
 
 /**
