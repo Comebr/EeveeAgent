@@ -1,4 +1,4 @@
-package com.azheng.boot.rag.chunking;
+package com.azheng.boot.rag.core.chunking;
 
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.splitter.*;

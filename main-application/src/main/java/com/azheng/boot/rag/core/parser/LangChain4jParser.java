@@ -1,4 +1,4 @@
-package com.azheng.boot.rag.parser;
+package com.azheng.boot.rag.core.parser;
 
 import com.azheng.boot.kb.dao.mapper.FileTORustFSLogMapper;
 import com.azheng.framework.exception.ServiceException;
