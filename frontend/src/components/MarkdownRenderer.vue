@@ -3,6 +3,7 @@ import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import hljs from 'highlight.js'
+import StructuredContentContainer from './StructuredContentContainer.vue'
 
 const props = defineProps({
   content: {
@@ -42,11 +43,19 @@ const isDarkMode = computed(() => {
   return false
 })
 
+// 自定义marked渲染器，为链接添加target="_blank"
+const renderer = new marked.Renderer()
+renderer.link = function(href, title, text) {
+  const link = marked.Renderer.prototype.link.call(this, href, title, text)
+  return link.replace('<a ', '<a target="_blank" rel="noopener noreferrer" ')
+}
+
 marked.setOptions({
   breaks: true,
   gfm: true,
   headerIds: false,
-  mangle: false
+  mangle: false,
+  renderer: renderer
 })
 
 const parseThinkingBlocks = (content) => {
@@ -83,6 +92,59 @@ const parseThinkingBlocks = (content) => {
   return parts
 }
 
+// 解析Markdown内容，分割成普通文本、表格和代码块
+const parseMarkdownContent = (content) => {
+  const parts = []
+  let lastIndex = 0
+  
+  // 匹配代码块，提取语言信息
+  const codeRegex = /```(\w*)[\s\S]*?```/g
+  let match
+  
+  while ((match = codeRegex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({
+        type: 'text',
+        content: content.slice(lastIndex, match.index)
+      })
+    }
+    parts.push({
+      type: 'code',
+      content: match[0],
+      language: match[1] || 'plaintext'
+    })
+    lastIndex = match.index + match[0].length
+  }
+  
+  // 匹配表格
+  const tableRegex = /\|.*?\|\s*\n\|.*?---.*?\|\s*\n(?:\|.*?\|\s*\n)+/g
+  const remainingContent = content.slice(lastIndex)
+  lastIndex = 0
+  
+  while ((match = tableRegex.exec(remainingContent)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({
+        type: 'text',
+        content: remainingContent.slice(lastIndex, match.index)
+      })
+    }
+    parts.push({
+      type: 'table',
+      content: match[0]
+    })
+    lastIndex = match.index + match[0].length
+  }
+  
+  if (lastIndex < remainingContent.length) {
+    parts.push({
+      type: 'text',
+      content: remainingContent.slice(lastIndex)
+    })
+  }
+  
+  return parts
+}
+
 const processedContent = computed(() => {
   if (!props.content) return []
 
@@ -96,24 +158,31 @@ const processedContent = computed(() => {
       }
     }
 
-    const rawHtml = marked.parse(part.content)
-
-    const cleanHtml = DOMPurify.sanitize(rawHtml, {
-      ALLOWED_TAGS: [
-        'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'strike', 'del',
-        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-        'ul', 'ol', 'li',
-        'blockquote', 'code', 'pre',
-        'a', 'img',
-        'table', 'thead', 'tbody', 'tr', 'th', 'td',
-        'hr', 'div', 'span'
-      ],
-      ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'target', 'data-language', 'data-code', 'data-line']
-    })
-
+    // 解析Markdown内容，分割成不同部分
+    const contentParts = parseMarkdownContent(part.content)
+    
     return {
       ...part,
-      renderedHtml: cleanHtml
+      contentParts: contentParts.map((contentPart, index) => {
+        const rawHtml = marked.parse(contentPart.content)
+        const cleanHtml = DOMPurify.sanitize(rawHtml, {
+          ALLOWED_TAGS: [
+            'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'strike', 'del',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'ul', 'ol', 'li',
+            'blockquote', 'code', 'pre',
+            'a', 'img',
+            'table', 'thead', 'tbody', 'tr', 'th', 'td',
+            'hr', 'div', 'span'
+          ],
+          ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'target', 'data-language', 'data-code', 'data-line']
+        })
+        
+        return {
+          ...contentPart,
+          renderedHtml: cleanHtml
+        }
+      })
     }
   })
 })
@@ -188,32 +257,6 @@ const highlightCode = () => {
     }
     lineNumbersDiv.innerHTML = lineNumbers
 
-    // 添加复制按钮
-    let copyBtn = preEl.querySelector('.copy-code-btn')
-    if (!copyBtn) {
-      copyBtn = document.createElement('button')
-      copyBtn.className = 'copy-code-btn'
-      copyBtn.title = '复制代码'
-      preEl.appendChild(copyBtn)
-    }
-    
-    // 确保所有按钮都添加到数组中
-    if (!copyButtons.value.includes(copyBtn)) {
-      copyButtons.value.push(copyBtn)
-    }
-    
-    // 设置属性和事件
-    copyBtn.dataset.codeId = preEl.dataset.codeId
-    copyBtn.onclick = () => {
-      console.log('复制按钮点击')
-      copyCode(block.textContent, preEl.dataset.codeId)
-    }
-    
-    // 初始化按钮图标
-    copyBtn.innerHTML = copiedCodeId.value === preEl.dataset.codeId
-      ? '<svg t="1776748090530" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="16" height="16"><path d="M429.5 773.3c-9.3 0-18.6-3.2-26.1-9.7L108.7 509.5c-16.7-14.4-18.6-39.7-4.2-56.4 14.4-16.7 39.7-18.6 56.4-4.2l266.6 229.9 454.8-451.2c15.7-15.6 41-15.5 56.6 0.2 15.6 15.7 15.5 41-0.2 56.6l-481 477.3c-7.8 7.7-18 11.6-28.2 11.6z" fill="currentColor"></path></svg>'
-      : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
-
     // 应用语法高亮
     hljs.highlightElement(block)
   })
@@ -252,7 +295,25 @@ onMounted(() => {
         </div>
         <div v-show="!thinkingCollapsed[part.id]" class="thinking-body" v-html="part.renderedHtml"></div>
       </div>
-      <div v-else class="markdown-content" v-html="part.renderedHtml"></div>
+      <div v-else class="markdown-content">
+        <!-- 根据contentParts渲染不同类型的内容 -->
+        <template v-if="part.contentParts">
+          <template v-for="(contentPart, index) in part.contentParts" :key="index">
+            <div v-if="contentPart.type === 'text'" v-html="contentPart.renderedHtml"></div>
+            <StructuredContentContainer v-else-if="contentPart.type === 'table'" type="表格">
+              <div v-html="contentPart.renderedHtml"></div>
+            </StructuredContentContainer>
+            <StructuredContentContainer 
+              v-else-if="contentPart.type === 'code'" 
+              type="代码"
+              :language="contentPart.language || 'plaintext'"
+            >
+              <div v-html="contentPart.renderedHtml"></div>
+            </StructuredContentContainer>
+          </template>
+        </template>
+        <div v-else v-html="part.renderedHtml"></div>
+      </div>
     </template>
   </div>
 </template>
@@ -390,50 +451,29 @@ onMounted(() => {
 
 .markdown-body :deep(pre) {
   position: relative;
-  margin: 16px 0;
+  margin: 0;
   padding: 0;
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
   background: #f6f8fa;
-  border: 1px solid #e1e4e8;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .dark-mode .markdown-body :deep(pre) {
   background: #1f2328;
-  border-color: #30363d;
-}
-
-.markdown-body :deep(pre)::before {
-  content: attr(data-language);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 16px;
-  background: #24292f;
-  color: #f0f6fc;
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: lowercase;
-  letter-spacing: 0.5px;
-}
-
-.dark-mode .markdown-body :deep(pre)::before {
-  background: #1a1f24;
 }
 
 .markdown-body :deep(pre .line-numbers) {
   position: absolute;
-  top: 36px;
+  top: 0;
   left: 0;
   width: 44px;
   padding: 16px 0;
   background: #f1f3f4;
   border-right: 1px solid #e1e4e8;
   text-align: center;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.6;
   color: #6e7781;
   user-select: none;
   z-index: 1;
@@ -454,8 +494,8 @@ onMounted(() => {
   padding: 16px 16px 16px 58px;
   background: transparent;
   border-radius: 0;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.6;
   color: #24292e;
   overflow-x: auto;
   tab-size: 2;
@@ -474,37 +514,47 @@ onMounted(() => {
   color: #e6edf3;
 }
 
-.markdown-body :deep(pre .copy-code-btn) {
-  position: absolute;
-  top: 8px;
-  right: 12px;
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  color: #f0f6fc;
-  font-size: 12px;
+/* 语法高亮配色 */
+.markdown-body :deep(pre code .hljs-keyword) {
+  color: #d73a49;
 }
 
-.markdown-body :deep(pre .copy-code-btn:hover) {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
+.markdown-body :deep(pre code .hljs-string) {
+  color: #032f62;
 }
 
-.dark-mode .markdown-body :deep(pre .copy-code-btn) {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
-  color: #f0f6fc;
+.markdown-body :deep(pre code .hljs-comment) {
+  color: #6a737d;
+  font-style: italic;
 }
 
-.dark-mode .markdown-body :deep(pre .copy-code-btn:hover) {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+.markdown-body :deep(pre code .hljs-function) {
+  color: #6f42c1;
+}
+
+.markdown-body :deep(pre code .hljs-variable) {
+  color: #e36209;
+}
+
+.dark-mode .markdown-body :deep(pre code .hljs-keyword) {
+  color: #ff7b72;
+}
+
+.dark-mode .markdown-body :deep(pre code .hljs-string) {
+  color: #a5d6ff;
+}
+
+.dark-mode .markdown-body :deep(pre code .hljs-comment) {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.dark-mode .markdown-body :deep(pre code .hljs-function) {
+  color: #d2a8ff;
+}
+
+.dark-mode .markdown-body :deep(pre code .hljs-variable) {
+  color: #ffa657;
 }
 
 .markdown-body :deep(a) {
@@ -531,27 +581,39 @@ onMounted(() => {
   font-size: 14px;
   overflow: hidden;
   border-radius: 8px;
-  border: 1px solid #e9ecef;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .markdown-body :deep(th) {
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  padding: 16px 20px;
+  background: #f8f9fa;
+  color: #495057;
   font-weight: 600;
   text-align: left;
-  border-bottom: 2px solid #e9ecef;
+  border-bottom: 1px solid #e9ecef;
+  letter-spacing: 0.5px;
 }
 
 .markdown-body :deep(td) {
-  padding: 12px 16px;
-  border-bottom: 1px solid #e9ecef;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f3f5;
   background: white;
+  line-height: 1.6;
+}
+
+.markdown-body :deep(td):last-child {
+  border-right: none;
+}
+
+.dark-mode .markdown-body :deep(th) {
+  background: #2d2d2d;
+  color: #e5e5e5;
+  border-bottom-color: #3d3d3d;
 }
 
 .dark-mode .markdown-body :deep(td) {
-  background: #2d2d2d;
-  border-color: #3d3d3d;
+  background: #252525;
+  border-bottom-color: #333;
   color: #e5e5e5;
 }
 
@@ -564,7 +626,65 @@ onMounted(() => {
 }
 
 .dark-mode .markdown-body :deep(tr:hover td) {
-  background: #3d3d3d;
+  background: #303030;
+}
+
+/* 状态标签样式 */
+.markdown-body :deep(.status-compliant) {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  background: #e8f5e8;
+  color: #2e7d32;
+}
+
+.markdown-body :deep(.status-suspicious) {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.markdown-body :deep(.status-violation) {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  background: #ffebee;
+  color: #c62828;
+}
+
+.dark-mode .markdown-body :deep(.status-compliant) {
+  background: #1b5e20;
+  color: #c8e6c9;
+}
+
+.dark-mode .markdown-body :deep(.status-suspicious) {
+  background: #ef6c00;
+  color: #fff3e0;
+}
+
+.dark-mode .markdown-body :deep(.status-violation) {
+  background: #c62828;
+  color: #ffebee;
+}
+
+/* 技术术语自动添加代码样式 */
+.markdown-body :deep(td code) {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 0.9em;
+  padding: 2px 6px;
+  background-color: #f1f3f5;
+  border-radius: 4px;
+  color: #e74d3d;
+}
+
+.dark-mode .markdown-body :deep(td code) {
+  background-color: #2d2d2d;
+  color: #f8c555;
 }
 
 .markdown-body :deep(img) {
