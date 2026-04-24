@@ -29,11 +29,18 @@ const showToast = (text, type = 'success', duration = 3000) => {
 }
 
 onMounted(() => {
-  // 显示退出登录成功消息
-  const showLogoutSuccess = localStorage.getItem('showLogoutSuccess') === 'true'
-  if (showLogoutSuccess) {
-    showToast('已成功退出', 'success')
-    localStorage.removeItem('showLogoutSuccess')
+  // 检查URL参数是否有消息提示
+  const urlParams = new URLSearchParams(window.location.search)
+  const message = urlParams.get('message')
+  const messageType = urlParams.get('messageType')
+  
+  if (message) {
+    showToast(message, messageType || 'error')
+    // 清除URL参数，避免刷新页面后重复显示
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.delete('message')
+    newUrl.searchParams.delete('messageType')
+    window.history.replaceState({}, '', newUrl.toString())
   }
 })
 
@@ -83,54 +90,21 @@ const handleLogin = async () => {
       password: form.password
     })
     
-    console.log('Login response:', response)
-    
     // 检查后端返回的业务码
     const data = response.data
     if (data.code === '0') {
-      // 保存token到本地存储
-      const token = data.data?.token || data.token
-      const userInfo = data.data || data
-      console.log('Token:', token)
-      console.log('UserInfo:', userInfo)
-      
-      if (token) {
-        localStorage.setItem('token', token)
-        localStorage.setItem('userInfo', JSON.stringify(userInfo))
-        
-        // 处理记住密码
-        if (form.remember) {
-          localStorage.setItem('rememberedUsername', form.username)
-          localStorage.setItem('rememberedPassword', form.password)
-        } else {
-          localStorage.removeItem('rememberedUsername')
-          localStorage.removeItem('rememberedPassword')
-        }
-        
-        // 设置登录成功标志
-        localStorage.setItem('showLoginSuccess', 'true')
-        
-        console.log('Token saved to localStorage')
-        // 直接跳转，不依赖事件触发
-        setTimeout(() => {
-          window.location.href = '/home'
-        }, 100)
-      } else {
-        error.value = '登录成功但未获取到token'
-        console.log('No token found in response')
-      }
+      // 登录成功，后端会设置HttpOnly Cookie
+      // 直接跳转
+      setTimeout(() => {
+        window.location.href = '/home'
+      }, 100)
     } else {
       // 显示后端返回的错误信息
       error.value = data.message || '用户名或密码错误'
-      console.log('Login failed:', data.message || data.msg)
-      console.log('Full error response:', data)
     }
   } catch (err) {
-    console.log('Login error:', err)
     if (err.response) {
       // 服务器返回错误
-      console.log('Error response data:', err.response.data)
-      console.log('Error response status:', err.response.status)
       const errorData = err.response.data
       // 后端返回的错误信息在 message 字段
       error.value = errorData.message || '用户名或密码错误'
