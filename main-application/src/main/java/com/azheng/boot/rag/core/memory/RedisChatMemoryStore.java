@@ -15,21 +15,25 @@ import java.util.List;
 @Component
 public class RedisChatMemoryStore implements ChatMemoryStore {
     // Redis Key 前缀（区分业务）
-    private static final String KEY_PREFIX = "EeveeAgent:chat:memory:";
+    private static final String KEY_PREFIX = "EeveeAgent:chat:memory:session:";
 
     // 会话过期时间：7天
-    private static final Duration EXPIRE_TIME = Duration.ofDays(15);
+    private static final Duration EXPIRE_TIME = Duration.ofDays(7);
 
     @Resource
     public StringRedisTemplate stringRedisTemplate;
 
     /**
+     * 历史摘要 原始会话
      * 获取会话记忆缓存
      */
     @Override
     public List<ChatMessage> getMessages(Object memoryId) {
         String key = buildKey(memoryId);
         String messages  = stringRedisTemplate.opsForValue().get(key);
+        if (messages == null) {
+            return List.of();
+        }
         return ChatMessageDeserializer.messagesFromJson(messages);
     }
 
