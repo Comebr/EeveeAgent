@@ -43,8 +43,14 @@ public class RAGConstant {
      */
     public static final String RAG_KB_PROMPT_TEMPLATE_PATH = "prompt/answer-chat-kb.st";
 
-
-
+    /**
+     * 标题生成模版
+     */
     public static final String TITLE_SUMMARY_TEMPLATE_PATH = "prompt/conversation-title-summary.st";
+
+    /**
+     * 多轮对话自动摘要模版
+     */
+    public static final String CONVERSATION_SUMMARY_TEMPLATE_PATH = "prompt/multiple-rounds-summary.st";
 
 }
