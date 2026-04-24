@@ -1,9 +1,13 @@
 package com.azheng.boot.rag.core.rerank;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class ReRankContext {
 
@@ -15,14 +19,16 @@ public class ReRankContext {
 
 
     /**
+     * 命中的文本内容
+     * 一般是被切分后的文档片段或段落
+     */
+    private String text;
+
+
+    /**
      * 命中得分
      * 数值越大表示与查询的相关性越高
      */
     private Float relevanceScore;
 
-    /**
-     * 命中的文本内容
-     * 一般是被切分后的文档片段或段落
-     */
-    private String text;
 }
