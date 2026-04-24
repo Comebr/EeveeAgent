@@ -7,6 +7,8 @@ import com.azheng.boot.rag.config.LLMConfig;
 import com.azheng.boot.rag.core.intent.IntentGroup;
 import com.azheng.boot.rag.core.intent.IntentResolver;
 import com.azheng.boot.rag.core.intent.SubQuestionIntent;
+import com.azheng.boot.rag.core.memory.AbstractCompressService;
+import com.azheng.boot.rag.core.memory.HistoryAbstractStore;
 import com.azheng.boot.rag.core.prompt.PromptContext;
 import com.azheng.boot.rag.core.prompt.PromptTemplateLoader;
 import com.azheng.boot.rag.core.prompt.RAGPromptService;
@@ -19,6 +21,8 @@ import com.azheng.boot.rag.service.ConversationService;
 import com.azheng.boot.rag.service.RAGChatService;
 import com.azheng.framework.context.UserContext;
 import com.azheng.framework.exception.ServiceException;
+import com.esotericsoftware.minlog.Log;
+import com.github.benmanes.caffeine.cache.Cache;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -27,13 +31,13 @@ import dev.langchain4j.invocation.InvocationContext;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.model.chat.StreamingChatModel;
-import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.chat.response.PartialResponse;
-import dev.langchain4j.model.chat.response.PartialResponseContext;
-import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
+import dev.langchain4j.model.chat.response.*;
 import dev.langchain4j.rag.query.Metadata;
 import dev.langchain4j.rag.query.Query;
-import jakarta.annotation.Resource;
+import lombok.Builder;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -41,45 +45,37 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 
 import static com.azheng.boot.rag.constant.RAGConstant.*;
 
 /* RAG模块 */
 @Service
+@RequiredArgsConstructor
 public class RAGChatServiceImpl implements RAGChatService {
 
-    @Resource
-    private LLMConfig llmConfig;
+    private final LLMConfig llmConfig;
+    private final RAGPromptService ragPromptService;
+    private final QueryTransformerService queryTransformerService;
+    private final IntentResolver intentResolver;
+    private final RetrievalEngine retrievalEngine;
+    private final ChatDataPersistenceService chatDataPersistenceService;
+    private final ConversationService conversationService;
+    private final PromptTemplateLoader promptTemplateLoader;
+    private final AbstractCompressService abstractCompressService;
+    private final HistoryAbstractStore historyAbstractStore;
 
-    @Resource
-    private ChatMemoryProvider chatMemoryProvider;
+    @Qualifier("streamHandleCache")
+    private final Cache<String, StreamingHandle> streamHandleCache;
 
-    @Resource
-    private RAGPromptService ragPromptService;
+    @Qualifier("originalChatMemoryProvider")
+    private final ChatMemoryProvider originalChatMemoryProvider;
 
-    @Resource
-    private QueryTransformerService queryTransformerService;
-
-    @Resource
-    private IntentResolver intentResolver;
-
-    @Resource
-    private RetrievalEngine retrievalEngine;
-
-    @Resource
-    private ChatDataPersistenceService chatDataPersistenceService;
-
-    @Resource
-    private ConversationService conversationService;
-
-    @Resource
-    private PromptTemplateLoader promptTemplateLoader;
-
-    private ConcurrentHashMap<String,Boolean> cancellationFlags = new ConcurrentHashMap<>();
+    @Qualifier("treatResponseThreadPoolExecutor")
+    private final Executor treatResponseThreadPoolExecutor;
 
     @Override
-    public void streamingChat(String userQuestion , String conversationId, Boolean openThinking, SseEmitter emitter) {
+    public void streamingChat(String userQuestion , String roundId, String conversationId, Boolean openThinking, SseEmitter emitter) {
 
         // 获取当前会话用户
         String userId = UserContext.getUserId();
@@ -108,8 +104,13 @@ public class RAGChatServiceImpl implements RAGChatService {
         StreamingChatModel streamingChatModel = llmConfig.buildQwenFlashStreamingModel(openThinking);
 
         // 根据会话id获取会话信息缓存
-        ChatMemory chatMemory = chatMemoryProvider.get(actualConversationId);
+        ChatMemory chatMemory = originalChatMemoryProvider.get(actualConversationId);
         List<ChatMessage> historyMessages = chatMemory.messages();
+        // 获取当前会话记忆的摘要
+        List<ChatMessage> abstractMessages = historyAbstractStore.query(historyMessages);
+        if(CollUtil.isNotEmpty(abstractMessages)){
+            historyMessages.addAll(abstractMessages);
+        }
 
 
 
@@ -139,7 +140,12 @@ public class RAGChatServiceImpl implements RAGChatService {
          */
         List<SubQuestionIntent> subQuestionIntentList = intentResolver.resolve(rewriteResult);
 
-        // 意图判断
+        /**
+         * 意图判断：
+         * 1.纯SYS -> true
+         * 2.部分SYS、部分无意图 ->true
+         * 3.掺杂KB意图 ->false
+         */
         boolean allSystemOnly = subQuestionIntentList.stream()
                 .allMatch(si -> intentResolver.isSystemOnly(si.nodeScores()));
 
@@ -165,16 +171,17 @@ public class RAGChatServiceImpl implements RAGChatService {
             }
             chatMessages.add(UserMessage.from(userQuestion));
 
-            // 3.模型响应
-            CompletableFuture<String> response = LLMChatResponse(streamingChatModel, chatMessages, emitter, actualConversationId);
+            TreatRequest request = TreatRequest
+                    .builder()
+                    .userId(userId)
+                    .userQuestion(userQuestion)
+                    .chatMemory(chatMemory)
+                    .isFirstChat(isFirstChat)
+                    .build();
 
-            // 4.持久化
-            response.whenComplete((result, throwable) -> {
-                if(throwable != null){
-                    return;
-                }
-                treatResponse(actualConversationId,userId,userQuestion,result,chatMemory,isFirstChat);
-            });
+            // 3.模型响应
+            LLMChatResponse(streamingChatModel, chatMessages, emitter, roundId , actualConversationId, request);
+
             return;
         }
 
@@ -218,61 +225,64 @@ public class RAGChatServiceImpl implements RAGChatService {
         /**
          * 5.调用聊天服务
          */
-        CompletableFuture<String> response = LLMChatResponse(streamingChatModel, messages, emitter, actualConversationId);
+        TreatRequest request = TreatRequest
+                .builder()
+                .userId(userId)
+                .userQuestion(userQuestion)
+                .chatMemory(chatMemory)
+                .isFirstChat(isFirstChat)
+                .build();
+        LLMChatResponse(streamingChatModel, messages, emitter, roundId , actualConversationId, request);
 
-        /**
-         * 6.收尾
-         * 不阻塞Tomcat线程,异步聊天完成后，自动调用treatResponse收尾
-         */
-        response.whenComplete((result, throwable) -> {
-            if(throwable != null){
-                return;
-            }
-            treatResponse(actualConversationId,userId,userQuestion,result,chatMemory,isFirstChat);
-        });
+    }
+
+    @Override
+    public void cancel(String roundId) {
+        StreamingHandle streamingHandle = streamHandleCache.getIfPresent(roundId);
+        if (streamingHandle == null) {
+            Log.warn("对话："+roundId+" 流式取消句柄为空，可能已完成或已取消");
+            return;
+        }
+        streamingHandle.cancel();
+        streamHandleCache.invalidate(roundId);
+        Log.warn("对话："+roundId+"终止");
     }
 
 
     /**
      * 调用模型对话服务
      * 记录模型输出内容，做进一步处理
-     *
-     * @return
      */
 
-    private CompletableFuture<String> LLMChatResponse(StreamingChatModel streamingChatModel,
-                                                      List<ChatMessage> messages,
-                                                      SseEmitter emitter,
-                                                      String actualConversationId) {
-
-        // 1. 创建异步结果（核心：自动承载返回值 + 同步等待）
-        CompletableFuture<String> future = new CompletableFuture<>();
-
-        cancellationFlags.put(actualConversationId, Boolean.FALSE);
-        emitter.onCompletion(()-> cancellationFlags.remove(actualConversationId));
-        emitter.onTimeout(()-> cancellationFlags.remove(actualConversationId));
-        emitter.onError((e)-> cancellationFlags.remove(actualConversationId));
-
-
+    private void LLMChatResponse(StreamingChatModel streamingChatModel,
+                                 List<ChatMessage> messages,
+                                 SseEmitter emitter,
+                                 String roundId,
+                                 String actualConversationId,
+                                 TreatRequest treatRequest) {
+        // 模型服务
         streamingChatModel.chat(messages, new StreamingChatResponseHandler() {
             @Override
-            public void onPartialResponse(PartialResponse partialResponse, PartialResponseContext context) {
-                // 检查取消标志
-                if (Boolean.TRUE.equals(cancellationFlags.get(actualConversationId))) {
-                    // 取消流式处理
-                    if (context.streamingHandle() != null) {
-                        context.streamingHandle().cancel();
-                    }
-                    try {
-                        emitter.send("【已取消】");
-                        emitter.complete();
-                    } catch (IOException e) {
-                        emitter.completeWithError(e);
-                    }
-                    future.completeExceptionally(new ServiceException("用户取消对话"));
-                    return;
+            public void onPartialThinking(PartialThinking partialThinking, PartialThinkingContext context) {
+                //返回思考内容
+                try {
+                    emitter.send(partialThinking.text());
+                    streamHandleCache.put(roundId,context.streamingHandle());
+                } catch (IOException e) {
+                    emitter.completeWithError(e);
                 }
+                onPartialThinking(partialThinking);
+            }
 
+
+
+            @Override
+            public void onPartialResponse(PartialResponse partialResponse, PartialResponseContext context) {
+                //追加流式句柄至本地缓存
+                StreamingHandle present = streamHandleCache.getIfPresent(roundId);
+                if(present == null){
+                    streamHandleCache.put(roundId,context.streamingHandle());
+                }
 
                 //1.流式输出回答
                 try {
@@ -286,37 +296,42 @@ public class RAGChatServiceImpl implements RAGChatService {
             public void onCompleteResponse(ChatResponse completeResponse) {
                 // 1.返回推理过程
                 try {
+                    String text = completeResponse.aiMessage().text();
+                    // 收到成功响应文本直接开始异步收尾
+                    CompletableFuture.runAsync(() ->
+                        treatResponse(actualConversationId, treatRequest.getUserId(), treatRequest.getUserQuestion(), text, treatRequest.getChatMemory(), treatRequest.getIsFirstChat())
+                                ,treatResponseThreadPoolExecutor
+                    );
+
+
                     String thinkingText = completeResponse.aiMessage().thinking();
                     if (StrUtil.isNotBlank(thinkingText)) {
                         emitter.send("【模型推理过程】："+"\n"+thinkingText);
                     }
-                    String responseText = completeResponse.aiMessage().text();
 
                     emitter.complete();
 
-                    future.complete(responseText);
 
                 } catch (IOException e) {
                     emitter.completeWithError(e);
-                    future.completeExceptionally(e);
                 }finally {
-                    cancellationFlags.remove(actualConversationId);
+                    //完成之后删除本轮流式输出句柄缓存
+                    streamHandleCache.invalidate(roundId);
                 }
             }
 
             @Override
             public void onError(Throwable error) {
-                cancellationFlags.remove(actualConversationId);
                 emitter.completeWithError(error);
-                future.completeExceptionally(error);
+                streamHandleCache.invalidate(roundId);
             }
         });
-        return future;
-    }
-
-    // 添加取消方法
-    public void cancelChat(String conversationId) {
-        cancellationFlags.put(conversationId, true);
+        // 防止刚发起对话就关闭浏览器
+        emitter.onCompletion(() -> streamHandleCache.invalidate(roundId));
+        //超时
+        emitter.onTimeout(() -> streamHandleCache.invalidate(roundId));
+        //意外错误断开连接..
+        emitter.onError(e -> streamHandleCache.invalidate(roundId));
     }
 
 
@@ -329,26 +344,45 @@ public class RAGChatServiceImpl implements RAGChatService {
      * @param chatMemory 会话记忆
      *                   持久化
      */
-    private void treatResponse(String actualConversationId,
+    public void treatResponse(String actualConversationId,
                                String userId,
                                String userQuestion,
                                String responseText,
                                ChatMemory chatMemory,
                                Boolean isFirstChat){
+        // 1.MySQL持久化消息
+        try {
+            chatDataPersistenceService.mysqlPersistent(actualConversationId,userId,userQuestion,responseText,isFirstChat);
 
-        // 1.MySQL
-        chatDataPersistenceService.mysqlPersistent(actualConversationId,userId,userQuestion,responseText,isFirstChat);
+            // 2.多轮对话压缩检测器
+            abstractCompressService.CompressIfNeed(actualConversationId,chatMemory.messages());
 
-        // 2.用户消息缓存-Redis
-        chatMemory.add( UserMessage.from(userQuestion));
+            // 3.缓存本轮对话
+            UserMessage userMessage = UserMessage.from(userQuestion);
+            AiMessage aiMessage = AiMessage.from(responseText);
+            chatMemory.add(userMessage);
+            chatMemory.add(aiMessage);
 
-        // 3.保存ai消息至记忆缓存
-        chatMemory.add(AiMessage.from(responseText));
+            // 4.首次->生成标题（变更：根据原始用户提问+模型响应text生成）
+            conversationService.generateTitle(actualConversationId,userQuestion);
+        } catch (Exception e) {
+            Log.error("\n"+"本轮对话收尾工作失败:"+
+                    "\n"+"用户提问："+userQuestion+
+                    "\n"+"异常信息：",e);
+            throw new ServiceException("会话："+actualConversationId+" 收尾阶段出现异常"+e);
+        }
 
-        // 4.首次-生成标题（变更：根据原始用户提问+模型响应text生成）
-        conversationService.generateTitle(actualConversationId,userQuestion);
+
     }
 
+    @Data
+    @Builder
+    public static class TreatRequest{
+        private String userId;
+        private String userQuestion;
+        private ChatMemory chatMemory;
+        private Boolean isFirstChat;
+    }
 
 
 }

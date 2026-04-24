@@ -16,18 +16,25 @@ public class RAGChatController {
 
     @GetMapping("/streamingChat")
     public SseEmitter streamingChat(@RequestParam("prompt") String question,
+                                    @RequestParam String roundId,
                                     @RequestParam(required = false) String conversationId,
                                     @RequestParam(required = false,defaultValue = "false") Boolean openThinking){
         SseEmitter sseEmitter = new SseEmitter(3 * 60 * 1000L);
-        ragChatService.streamingChat(question, conversationId, openThinking, sseEmitter);
+        ragChatService.streamingChat(question, roundId , conversationId, openThinking, sseEmitter);
         return sseEmitter;
     }
 
 
-    // 停止接口
     @PostMapping("/cancel")
-    public Result<Void> cancelChat(@RequestParam String conversationId) {
-        ragChatService.cancelChat(conversationId);
-        return Results.success();
+    public Result<Void> streamingChatCancellation(@RequestParam String roundId){
+        try {
+            ragChatService.cancel(roundId);
+            return Results.success();
+        } catch (Exception e) {
+            return Results.failure();
+        }
     }
+
+
+
 }
