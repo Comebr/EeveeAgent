@@ -1,8 +1,8 @@
 package com.azheng.boot.rag.core.embedding.milvus.operation;
 
-import com.azheng.boot.rag.core.embedding.milvus.config.MilvusClientConfig;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 运用官方Milvus客户端向量化
@@ -49,6 +50,15 @@ public class VectorEmbedding {
             JsonObject jsonObject = new JsonObject();
             jsonObject.add("chunk_text_vector",new Gson().toJsonTree(vector));
             jsonObject.addProperty("chunk_text_varchar", text);
+
+            // ===================== 【核心：添加 Metadata】 =====================
+            // 1. 从 TextSegment 中获取已设置的 Metadata（非null）
+            Metadata metadata = textSegment.metadata();
+            // 2. 将 Metadata 转为 Map，再转成 JsonObject
+            Map<String, Object> metadataMap = metadata.toMap();
+            JsonObject metadataJson = new Gson().toJsonTree(metadataMap).getAsJsonObject();
+            // 3. 添加到 Milvus 数据中（字段名必须是 metadata）
+            jsonObject.add("metadata", metadataJson);
 
             data.add(jsonObject);
         }
