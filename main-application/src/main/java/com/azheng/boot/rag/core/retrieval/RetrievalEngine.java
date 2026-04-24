@@ -2,22 +2,17 @@ package com.azheng.boot.rag.core.retrieval;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
-import com.azheng.boot.rag.core.embedding.milvus.operation.MilvusRetrievalResult;
 import com.azheng.boot.rag.core.intent.IntentNode;
 import com.azheng.boot.rag.core.intent.NodeScore;
 import com.azheng.boot.rag.core.intent.SubQuestionIntent;
 import com.azheng.boot.rag.core.prompt.ContextFormatter;
-import com.azheng.boot.rag.core.recall.RecallService;
-import com.azheng.boot.rag.core.rerank.DashScopeRerankService;
 import com.azheng.boot.rag.core.rerank.ReRankContext;
 import com.azheng.boot.rag.enums.IntentKind;
-import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,20 +27,19 @@ import static com.azheng.boot.rag.constant.RAGConstant.*;
 @RequiredArgsConstructor
 public class RetrievalEngine {
 
-    @Resource
-    private RecallService recallService;
-
-    @Resource
-    private DashScopeRerankService dashScopeRerankService;
+    private final ContextFormatter contextFormatter;
+    private final MultiChannelRetrievalEngine multiChannelRetrievalEngine;
 
     @Qualifier("ragContextThreadPoolExecutor")
-    private  Executor ragContextExecutor;
-
-    @Resource
-    private ContextFormatter contextFormatter;
+    private final Executor ragContextExecutor;
 
 
-
+    /**
+     * 检索主入口
+     * @param subIntents 列表<子问题，意图>
+     * @param topK 相似度最高的前若干个
+     * @return 最终检索结果
+     */
     public RetrievalContext retrieval(List<SubQuestionIntent> subIntents, int topK){
         if (CollUtil.isEmpty(subIntents)) {
             return RetrievalContext.builder()
@@ -58,7 +52,8 @@ public class RetrievalEngine {
         // 2，为每个子问题执行多通道检索（知识库）
         int finalTopK = topK > 0 ? topK : DEFAULT_TOP_K;
 
-/*        List<CompletableFuture<SubQuestionContext>> tasks = subIntents.stream()
+        // 异步
+        List<CompletableFuture<SubQuestionContext>> tasks = subIntents.stream()
                 .map(si -> CompletableFuture.supplyAsync(
                         () -> buildSubQuestionContext(
                                 si,
@@ -69,10 +64,12 @@ public class RetrievalEngine {
                 .toList();
         List<SubQuestionContext> contexts = tasks.stream()
                 .map(CompletableFuture::join)
-                .toList();*/
+                .toList();
+
+        /*// 同步
         List<SubQuestionContext> contexts = subIntents.stream()
                 .map(si -> buildSubQuestionContext(si, resolveSubQuestionTopK(si, finalTopK)))
-                .toList();
+                .toList();*/
 
         // 3，合并所有子问题的检索结果，生成最终的检索上下文
         StringBuilder kbBuilder = new StringBuilder();
@@ -93,6 +90,11 @@ public class RetrievalEngine {
                 .build();
     }
 
+    /**
+     * 构建检索上下文（单个子问题）
+     * @param intent 对象<子问题,意图>
+     * @param topK 相似度最高的前若干个
+     */
     private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent, int topK) {
         List<NodeScore> kbIntents = filterKbIntents(intent.nodeScores());
 
@@ -100,32 +102,18 @@ public class RetrievalEngine {
 
         return new SubQuestionContext(intent.subQuestion(), kbResult.groupedContext(), kbResult.intentChunks());
     }
+
+    /**
+     * 检索+后处理
+     * @param intent 对象<子问题,意图>
+     * @param kbIntents 纯KB检索对象
+     * @param topK 相似度最高的前若干个
+     */
     private KbResult retrieveAndRerank(SubQuestionIntent intent, List<NodeScore> kbIntents, int topK) {
 
-        /**
-         * recall召回
-         */
-        //召回结果
-        Map<String, List<MilvusRetrievalResult>> subQuestionRecallMap = recallService.recallMilvusContentWithKB(intent);
+        List<SubQuestionIntent> subQuestionIntents = List.of(intent);
+        List<ReRankContext> suQuestionReRankList  = multiChannelRetrievalEngine.retrieveKnowledgeChannels(subQuestionIntents, topK);
 
-        // 收集文档
-        List<String> documents = new ArrayList<>();
-        subQuestionRecallMap.forEach((k, v) -> {
-            List<String> list = v.stream().map(MilvusRetrievalResult::getText).toList();
-            documents.addAll(list);
-        });
-
-        // 检查文档列表是否为空
-        if (CollUtil.isEmpty(documents)) {
-            return KbResult.empty();
-        }
-
-        /**
-         * Rerank 重排
-         */
-        List<ReRankContext> suQuestionReRankList = dashScopeRerankService.rerank(
-                                                                                                    intent.subQuestion(),
-                                                                                                    documents);
 
         if(CollUtil.isEmpty(suQuestionReRankList)){
             return KbResult.empty();
@@ -148,20 +136,19 @@ public class RetrievalEngine {
             intentChunks.put(MULTI_CHANNEL_KEY, suQuestionReRankList);
         }
 
-        /**
-         * 聚合成一个文本字符串groupContext
-         */
-
+        // 聚合成一个文本字符串groupContext
         String groupedContext = contextFormatter.formatKbContext(kbIntents, intentChunks, topK);
-        /**
-         * 合并为KbResult:groupContext、Map
-         */
 
+        //合并为KbResult:groupContext、Map
         return new KbResult(groupedContext, intentChunks);
     }
 
 
-
+    /**
+     * 维护TopK
+     * @param intent 对象<子问题,意图>
+     * @param fallbackTopK 储备TopK
+     */
     private int resolveSubQuestionTopK(SubQuestionIntent intent, int fallbackTopK) {
         return filterKbIntents(intent.nodeScores()).stream()
                 .map(NodeScore::getNode)
@@ -176,10 +163,13 @@ public class RetrievalEngine {
 
     /**
      * 过滤出KB检索意图
-     * @param nodeScores
-     * @return
+     * @param nodeScores 列表<节点评分对象>
+     * @return 纯KB节点列表
      */
     private List<NodeScore> filterKbIntents(List<NodeScore> nodeScores) {
+        if(nodeScores==null || nodeScores.isEmpty()){
+            return List.of();
+        }
         return nodeScores.stream()
                 .filter(ns -> ns.getScore() >= INTENT_MIN_SCORE)
                 .filter(ns -> {
@@ -192,6 +182,12 @@ public class RetrievalEngine {
                 .toList();
     }
 
+    /**
+     * 格式化拼接检索结果
+     * @param builder 拼接器
+     * @param question 问题
+     * @param context 文档
+     */
     private void appendSection(StringBuilder builder, String question, String context) {
         builder.append("---\n")
                 .append("**子问题**：").append(question).append("\n\n")
