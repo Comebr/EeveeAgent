@@ -510,6 +510,12 @@ lc4j提供了5个核心组件：
 
 7.LanguageModelQueryRouter靠一段自然语言描述让 LLM 去 “猜” 该用哪个 Retriever。描述写差一点、问题偏一点，直接路由错。完全不可控，出了问题没法排查。
 
+8.会话记忆策略类采用本地缓存，易出现并发冲突导致丢失、覆盖，策略不够灵活
+
+9.重排模型目前不支持
+
+10.各类设计模型调用的工具类，其提示词模版都是英文
+
 
 
 > 有的同学看到这，会很悲观，langchain4j缺点这么多，还有必要学吗QAQ？答案是：一定要学，不仅要学langchain4j，还要学SpringAI、SAA...不管任何技术都有一定的缺陷，没有完美的技术，只有懒惰的人。langchain4j的弱势项可以用其他框架的优点去弥补。凡事都要循序渐进，没有谁一出生就是架构师，通过各类框架的学习增长自身的工程能力、架构能力。
@@ -1360,6 +1366,46 @@ retrieve(buildSubQuestionContext)
 细节：首次发起对话并完成后创建，
 
 前端的新对话按键要做防抖，点击之后预览新的聊天界面，并调用后端的接口获取唯一对话id，但是不调用创建窗口，等到用户发起之后再将得到的会话id传给后端创建，管他完没完成，
+
+
+
+## 会话终止
+
+**核心接口：StreamingHandle**
+
+位于onPartialResponse部分反应阶段，PartialResponseContext对象携带的参数
+
+### 实现类：
+
+![image-20260424092055172](./../../../images/image-20260424092055172.png)
+
+1.CancellationUnsupportedStreamingHandle作用是当非指定流式输出部分反应阶段时若调用cancel方法，会抛出异常：
+
+- 这个 StreamingChatModel 实现类不支持「流式取消」功能；并且你调用了错误的方法，应该使用带两个参数的 onPartialResponse(响应对象, 上下文)，而不是只传字符串的 onPartialResponse(字符串)。
+
+2.匿名内部类ServerSentEventParsingHandleUtils
+
+这个类是一个**适配器工具类**，作用只有一个：
+
+- 把 **SSE（服务器发送事件）专用的解析句柄 `ServerSentEventParsingHandle`** → 转换成 **LangChain4j 通用的流式控制句柄 `StreamingHandle`**。
+- 你调用 `StreamingHandle.cancel()`
+- 这个工具类会**立刻转发**给真正的 SSE 流句柄 `parsingHandle.cancel()`
+- 底层 `parsingHandle.cancel()` 才是**真正执行停止操作**的代码（比如：关闭 HTTP 连接、停止接收 SSE 事件、终止流式解析）
+
+
+
+#### 核心方法：
+
+```java
+StreamingHandle streamingHandle = context.streamingHandle();
+streamingHandle.cancel();
+```
+
+
+
+
+
+
 
 
 
