@@ -38,6 +38,7 @@
         <transmittable-thread-local.version>2.14.5</transmittable-thread-local.version>
         <redisson.version>4.0.0</redisson.version>
         <okhttp.version>4.12.0</okhttp.version>
+        <caffeine.version>3.1.8</caffeine.version>
         <spotless-maven-plugin.version>2.22.1</spotless-maven-plugin.version>
 
         <!-- AI框架-->
@@ -155,6 +156,12 @@
                 <groupId>com.squareup.okhttp3</groupId>
                 <artifactId>okhttp</artifactId>
                 <version>${okhttp.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.ben-manes.caffeine</groupId>
+                <artifactId>caffeine</artifactId>
+                <version>${caffeine.version}</version>
+                <scope>compile</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -304,6 +311,18 @@
 
     <!-- 第二版新增：Maven仓库（Spring官方 + 阿里云） -->
     <repositories>
+        <!-- 1. Maven Central -->
+        <repository>
+            <id>maven-central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+
         <repository>
             <id>spring-milestones</id>
             <name>Spring Milestones</name>
@@ -312,6 +331,7 @@
                 <enabled>false</enabled>
             </snapshots>
         </repository>
+
         <repository>
             <id>spring-snapshots</id>
             <name>Spring Snapshots</name>
@@ -326,17 +346,7 @@
             <name>aliyun</name>
             <url>https://maven.aliyun.com/repository/public</url>
         </repository>
-        <!-- 1. Maven Central -->
-        <repository>
-            <id>maven-central</id>
-            <url>https://repo.maven.apache.org/maven2</url>
-            <releases>
-                <enabled>true</enabled>
-            </releases>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-        </repository>
+
 
     </repositories>
 
