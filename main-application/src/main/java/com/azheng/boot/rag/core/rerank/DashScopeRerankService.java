@@ -25,24 +25,23 @@ public class DashScopeRerankService {
     @Value("${langchain4j.community.dashscope.api-key}")
     private String apiKey;
 
-    @Value("${rerank.top-n}")
-    private Integer TopN;
 
     /**
      * 重排用的Query是原问题,召回得到的结果只用传过来文本，不用传召回文本的得分，因为重排不会参考
      * 那Rerank也是原子性，只对一个子问题
      * 获得最终精排后的Contents
      */
-    public List<ReRankContext> rerank(String suQuestion, List<String> chunks) {
+    public List<ReRankContext> rerank(String suQuestion, List<ReRankContext> chunks, Integer topK) {
         TextReRank textReRank = new TextReRank();
 
         List<ReRankContext> reRankContexts = new ArrayList<>();
+        List<String> documents = chunks.stream().map(ReRankContext::getText).toList();
 
         TextReRankParam textReRankParam = TextReRankParam
                                                 .builder()
                                                 .query(suQuestion)
-                                                .documents(chunks)
-                                                .topN(TopN)
+                                                .documents(documents)
+                                                .topN(topK)
                                                 .apiKey(apiKey)
                                                 .model(TextReRank.Models.GTE_RERANK_V2)
                                                 .returnDocuments(true)
