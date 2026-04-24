@@ -16,7 +16,7 @@ const mouseNearSidebar = ref(false)
 // 消息提示
 const showMessage = ref(false)
 const messageText = ref('')
-const messageType = ref('success') // success, error, info
+const messageType = ref('') // success, error, info
 
 // 显示消息
 const showToast = (text, type = 'success', duration = 3000) => {
@@ -66,7 +66,9 @@ const getCurrentSessionState = () => {
       messages: [],
       isStreaming: false,
       eventSource: null,
-      currentRequestId: null
+      currentRoundId: null,
+      outputTimer: null,
+      isCancelling: false
     })
   }
   return sessionStates.value.get(sessionId)
@@ -97,14 +99,14 @@ const eventSource = computed({
 })
 
 // 获取当前会话的请求ID
-const currentRequestId = computed({
+const currentRoundId = computed({
   get: () => {
     const sessionState = getCurrentSessionState()
-    return sessionState.currentRequestId
+    return sessionState.currentRoundId
   },
   set: (value) => {
     const sessionState = getCurrentSessionState()
-    sessionState.currentRequestId = value
+    sessionState.currentRoundId = value
   }
 })
 
@@ -215,10 +217,10 @@ const sendMessage = async () => {
   try {
     // 由于 SSE 只支持 GET 请求，我们需要将参数作为查询参数传递
     const openThinking = deepThinking.value
-    // 生成请求ID用于停止功能
-    const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
-    sessionState.currentRequestId = requestId
-    let url = `/agent/rag/streamingChat?prompt=${encodeURIComponent(userMessage.content)}&openThinking=${openThinking}&requestId=${requestId}`
+    // 生成roundId用于取消功能
+    const roundId = 'round_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+    sessionState.currentRoundId = roundId
+    let url = `/agent/rag/streamingChat?prompt=${encodeURIComponent(userMessage.content)}&roundId=${roundId}&openThinking=${openThinking}`
     // 只有当currentConversationId不是临时ID时才传递，新会话不传conversationId
     if (currentConversationId.value && !currentConversationId.value.startsWith('temp_')) {
       url += `&conversationId=${currentConversationId.value}`
@@ -227,12 +229,12 @@ const sendMessage = async () => {
     const eventSource = new EventSource(url)
     sessionState.eventSource = eventSource
     sessionState.isStreaming = true
+    sessionState.outputTimer = null
     
     let buffer = ''
     let displayContent = ''
     let firstDataReceived = false
     let isComplete = false
-    let outputTimer = null
     let receivedConversationId = currentConversationId.value
     
     const startSmoothOutput = () => {
@@ -244,6 +246,8 @@ const sendMessage = async () => {
         let currentIndex = 0
         
         const processChunk = () => {
+          if (sessionState.isCancelling) return
+          
           if (currentIndex >= buffer.length) {
             if (isComplete) {
               // 所有内容处理完成
@@ -262,7 +266,7 @@ const sendMessage = async () => {
               })
             } else {
               // 缓冲区已处理完但流式传输未结束，继续等待新数据
-              outputTimer = setTimeout(processChunk, 50)
+              sessionState.outputTimer = setTimeout(processChunk, 50)
             }
             return
           }
@@ -278,6 +282,8 @@ const sendMessage = async () => {
           let chunkIndex = 0
           
           const outputChar = () => {
+            if (sessionState.isCancelling) return
+            
             if (chunkIndex < chunk.length) {
               displayContent += chunk[chunkIndex]
               chunkIndex++
@@ -300,7 +306,7 @@ const sendMessage = async () => {
               })
               
               // 继续输出下一个字符
-              outputTimer = setTimeout(outputChar, CHAR_INTERVAL_MS)
+              sessionState.outputTimer = setTimeout(outputChar, CHAR_INTERVAL_MS)
             } else {
               // 当前chunk输出完成，处理下一个chunk
               currentIndex += chunkSize
@@ -380,7 +386,7 @@ const sendMessage = async () => {
         displayContent = buffer // 确保displayContent与buffer同步
         
         // 如果是首次收到数据，启动输出
-        if (firstDataReceived && !outputTimer) {
+        if (firstDataReceived && !sessionState.outputTimer) {
           startSmoothOutput()
         }
       }
@@ -547,7 +553,10 @@ const regenerateResponse = async (message) => {
     try {
       // 由于 SSE 只支持 GET 请求，我们需要将参数作为查询参数传递
       const openThinking = deepThinking.value
-      let url = `/agent/rag/streamingChat?prompt=${encodeURIComponent(lastUserMessage.content)}&openThinking=${openThinking}`
+      // 生成roundId用于取消功能
+      const roundId = 'round_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+      sessionState.currentRoundId = roundId
+      let url = `/agent/rag/streamingChat?prompt=${encodeURIComponent(lastUserMessage.content)}&roundId=${roundId}&openThinking=${openThinking}`
       if (currentConversationId.value) {
         url += `&conversationId=${currentConversationId.value}`
       }
@@ -676,7 +685,7 @@ const regenerateResponse = async (message) => {
           buffer += event.data
           
           // 如果是首次收到数据，启动输出
-          if (firstDataReceived && !outputTimer) {
+          if (firstDataReceived && !sessionState.outputTimer) {
             startSmoothOutput()
           }
         }
@@ -919,6 +928,76 @@ const pauseStreaming = () => {
     sessionState.eventSource.close()
     sessionState.isStreaming = false
   }
+}
+
+// 取消流式输出
+const cancelStreaming = async () => {
+  const sessionState = getCurrentSessionState()
+  
+  // 幂等：正在取消中或已经不在流式状态，则直接返回
+  if (sessionState.isCancelling || !sessionState.isStreaming) {
+    return
+  }
+  
+  // 保存roundId，用于调用后端取消接口
+  const roundIdToCancel = sessionState.currentRoundId
+  
+  // 1. 设置取消状态，阻止新的渲染更新
+  sessionState.isCancelling = true
+  
+  // 2. 调用 SSE 原生关闭，不再接收后端推的 token
+  if (sessionState.eventSource) {
+    sessionState.eventSource.close()
+    sessionState.eventSource = null
+  }
+  
+  // 3. 渲染层立刻停掉：清理所有定时器
+  if (sessionState.outputTimer) {
+    clearTimeout(sessionState.outputTimer)
+    clearInterval(sessionState.outputTimer)
+    sessionState.outputTimer = null
+  }
+  
+  // 清理全局定时器
+  const timers = window.__chatTimers || []
+  timers.forEach(timer => {
+    clearTimeout(timer)
+    clearInterval(timer)
+  })
+  window.__chatTimers = []
+  
+  // 4. 终止自动滚动等流式联动效果
+  autoScroll.value = false
+  
+  // 5. 保留已经生成完的文字，更新UI状态
+  const streamingMessageIndex = sessionState.messages.findIndex(msg => msg.isStreaming)
+  if (streamingMessageIndex !== -1) {
+    // 保留已输出的内容，不清空
+    sessionState.messages[streamingMessageIndex] = {
+      ...sessionState.messages[streamingMessageIndex],
+      isStreaming: false,
+      isThinking: false
+      // content保持原样，不追加任何文字
+    }
+  }
+  
+  // 6. UI 状态重置
+  sessionState.isStreaming = false
+  sessionState.currentRoundId = null
+  
+  // 7. 调用后端取消接口（异步，不阻塞UI更新）
+  if (roundIdToCancel) {
+    try {
+      await axios.post('/agent/rag/cancel', null, {
+        params: { roundId: roundIdToCancel }
+      })
+    } catch (error) {
+      console.error('取消流式输出失败:', error)
+    }
+  }
+  
+  // 8. 重置取消状态
+  sessionState.isCancelling = false
 }
 
 // 手动滚动到底部
@@ -1502,9 +1581,9 @@ const goToAdmin = () => {
       </div>
       
       <!-- 历史会话 -->
-      <div class="sidebar-section">
+      <div class="sidebar-section conversation-section">
         <h3 class="section-title" v-show="!sidebarCollapsed">历史会话</h3>
-        <div class="menu-list">
+        <div class="menu-list conversation-list">
           <div 
             v-for="conversation in conversations" 
             :key="conversation.conversationId"
@@ -1512,9 +1591,7 @@ const goToAdmin = () => {
             @click="openConversation(conversation)"
           >
             <span class="menu-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
+              <svg t="1777010404897" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="10462" width="16" height="16"><path d="M821.333333 800H547.584l-86.464 96.074667a32 32 0 1 1-47.573333-42.816l96-106.666667A32 32 0 0 1 533.333333 736h288a53.333333 53.333333 0 0 0 53.333334-53.333333V234.666667a53.333333 53.333333 0 0 0-53.333334-53.333334H202.666667a53.333333 53.333333 0 0 0-53.333334 53.333334v448a53.333333 53.333333 0 0 0 53.333334 53.333333h138.666666a32 32 0 0 1 0 64H202.666667c-64.8 0-117.333333-52.533333-117.333334-117.333333V234.666667c0-64.8 52.533333-117.333333 117.333334-117.333334h618.666666c64.8 0 117.333333 52.533333 117.333334 117.333334v448c0 64.8-52.533333 117.333333-117.333334 117.333333zM704 341.333333a32 32 0 0 1 0 64H320a32 32 0 0 1 0-64h384zM512 512a32 32 0 0 1 0 64H320a32 32 0 0 1 0-64h192z" fill="currentColor" p-id="10463"></path></svg>
             </span>
             <span class="menu-text" v-show="!sidebarCollapsed">{{ conversation.title }}</span>
             <button 
@@ -1597,9 +1674,9 @@ const goToAdmin = () => {
         <div class="header-right">
           <!-- 管理后台按钮 -->
           <button class="admin-button" @click="goToAdmin">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            <svg class="icon" viewBox="0 0 1821 1024" width="32" height="32">
+              <path d="M330.666667 105.333333h354.666666v354.666667H330.666667zM330.666667 553.333333h354.666666v354.666667H330.666667zM778.666667 553.333333h354.666666v354.666667H778.666667z" fill="#077CE7"></path>
+              <path d="M955.996 31.873333l250.784 250.785334-250.784 250.784-250.785333-250.784z" fill="#83BDF3"></path>
             </svg>
             <span>管理后台</span>
           </button>
@@ -1755,25 +1832,23 @@ const goToAdmin = () => {
                   {{ inputText.length }}/2000
                 </div>
                 <button 
-                  v-if="!isStreaming" 
-                  class="send-button" 
-                  @click="sendMessage"
-                  :disabled="isLoading || !inputText.trim()"
+                  v-if="isStreaming" 
+                  class="cancel-button" 
+                  @click="cancelStreaming"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="22" y1="2" x2="11" y2="13"/>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
                 </button>
                 <button 
                   v-else 
-                  class="pause-button" 
-                  @click="pauseStreaming"
+                  class="send-button" 
+                  :class="{ 'send-button-active': inputText.trim() && !isLoading }"
+                  @click="sendMessage"
+                  :disabled="isLoading || !inputText.trim()"
                 >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="6" y="4" width="4" height="16"/>
-                    <rect x="14" y="4" width="4" height="16"/>
-                  </svg>
+                  <svg t="1777011460737" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="19653" width="16" height="16"><path d="M469.333333 371.84L319.445333 512 256 452.693333 512 213.333333l256 239.36L704.554667 512 554.666667 371.84V853.333333h-85.333334z" fill="currentColor" p-id="19654"></path></svg>
                 </button>
               </div>
             </div>
@@ -1936,6 +2011,40 @@ html, body {
 .sidebar-section {
   padding: 16px 12px;
   flex-shrink: 0;
+}
+
+/* 历史会话区域 - 可滚动 */
+.conversation-section {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+}
+
+.conversation-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-right: -4px;
+}
+
+/* 自定义滚动条样式 */
+.conversation-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.conversation-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.conversation-list::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 2px;
+}
+
+.conversation-list::-webkit-scrollbar-thumb:hover {
+  background: #b3b3b3;
 }
 
 .section-title {
@@ -2246,12 +2355,12 @@ html, body {
 .admin-button {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 1px;
   padding: 8px 16px;
   background-color: white;
   border: 2px solid #e0e0e0;
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: 20px;
+  font-size: 16px;
   color: #667eea;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -2838,10 +2947,10 @@ html, body {
 .input-wrapper {
   background: linear-gradient(to bottom, rgba(248, 249, 250, 0.8), rgba(255, 255, 255, 0.2));
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(224, 224, 224, 0.3);
+  border: 1px solid rgba(224, 224, 224, 0.5);
   border-radius: 12px;
   padding: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   width: 100%;
   max-width: 820px;
   margin: 0;
@@ -2928,17 +3037,23 @@ html, body {
   width: 36px;
   height: 36px;
   border: none;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 8px;
-  cursor: pointer;
+  background: #e8e8e8;
+  border-radius: 50%;
+  cursor: not-allowed;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: #999;
   transition: all 0.2s ease;
 }
 
-.send-button:hover {
+.send-button.send-button-active {
+  background: #667eea;
+  color: white;
+  cursor: pointer;
+}
+
+.send-button.send-button-active:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
@@ -2958,6 +3073,25 @@ html, body {
 }
 
 .pause-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+}
+
+.cancel-button {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.cancel-button:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
 }
