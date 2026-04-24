@@ -9,13 +9,14 @@ import com.azheng.boot.kb.dao.po.KnowledgeBasePO;
 import com.azheng.boot.kb.controller.request.CreateKbRequest;
 import com.azheng.boot.kb.controller.request.KnowledgeBasePageRequest;
 import com.azheng.boot.kb.controller.request.ReNameKbRequest;
+import com.azheng.boot.kb.dao.po.KnowledgeChunkPO;
+import com.azheng.boot.kb.dao.po.KnowledgeDocumentPO;
 import com.azheng.boot.kb.service.KnowledgeBaseService;
 import com.azheng.boot.kb.controller.vo.KnowledgeBaseVO;
-import com.azheng.boot.rag.embedding.milvus.operation.MilvusOperations;
+import com.azheng.boot.rag.core.embedding.milvus.operation.MilvusOperations;
 import com.azheng.framework.context.UserContext;
 import com.azheng.framework.exception.ClientException;
 import com.azheng.framework.exception.ServiceException;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -94,13 +95,16 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                                     .set(KnowledgeBasePO::getDelFlag,1)
         );
 
-        UpdateWrapper updateWrapper = new UpdateWrapper();
-        updateWrapper.eq("kb_id",kbId);
-        updateWrapper.set("del_flag",1);
         // 2.删除所属文档
-        knowledgeDocumentMapper.update(updateWrapper);
+        knowledgeDocumentMapper.update(Wrappers.<KnowledgeDocumentPO>lambdaUpdate()
+                .eq(KnowledgeDocumentPO::getKbId,kbId)
+                .set(KnowledgeDocumentPO::getDelFlag,1)
+        );
         // 3.删除所属知识块
-        knowledgeChunkMapper.update(updateWrapper);
+        knowledgeChunkMapper.update(Wrappers.<KnowledgeChunkPO>lambdaUpdate()
+                .eq(KnowledgeChunkPO::getKbId,kbId)
+                .set(KnowledgeChunkPO::getDelFlag,1)
+        );
 
         // 4.删除所属MilvusCollection
     }

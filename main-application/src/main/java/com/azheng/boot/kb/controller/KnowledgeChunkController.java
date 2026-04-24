@@ -9,7 +9,6 @@ import com.azheng.framework.web.Results;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/kb/doc/chunk")
@@ -32,8 +31,7 @@ public class KnowledgeChunkController {
 
     /**
      * 编辑知识块
-     * @param request
-     * @return
+     * @param request 请求体
      */
     @PutMapping("/mkdirText")
     public Result<Void> updateText(@RequestBody MkdirChunkTextRequest request){

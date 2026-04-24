@@ -16,11 +16,11 @@ import com.azheng.boot.kb.dao.po.KnowledgeBasePO;
 import com.azheng.boot.kb.dao.po.KnowledgeChunkPO;
 import com.azheng.boot.kb.dao.po.KnowledgeDocumentPO;
 import com.azheng.boot.kb.service.KnowledgeChunkService;
-import com.azheng.boot.rag.chunking.ChunkOptions;
-import com.azheng.boot.rag.chunking.LangChain4jSplitter;
-import com.azheng.boot.rag.embedding.milvus.operation.MilvusOperations;
-import com.azheng.boot.rag.embedding.milvus.operation.VectorEmbedding;
-import com.azheng.boot.rag.parser.LangChain4jParser;
+import com.azheng.boot.rag.core.chunking.ChunkOptions;
+import com.azheng.boot.rag.core.chunking.LangChain4jSplitter;
+import com.azheng.boot.rag.core.embedding.milvus.operation.MilvusOperations;
+import com.azheng.boot.rag.core.embedding.milvus.operation.VectorEmbedding;
+import com.azheng.boot.rag.core.parser.LangChain4jParser;
 import com.azheng.framework.context.UserContext;
 import com.azheng.framework.exception.ClientException;
 import com.azheng.framework.exception.ServiceException;
@@ -38,7 +38,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 @Slf4j
@@ -49,9 +48,6 @@ public class knowledgeChunkServiceImpl implements KnowledgeChunkService {
 
     @Resource
     private LangChain4jSplitter langChain4jSplitter;
-
-//    @Resource
-//    private Langchain4jVectorEmbedding vectorEmbedding;
 
     @Resource
     private MilvusOperations milvusOperations;
@@ -98,6 +94,8 @@ public class knowledgeChunkServiceImpl implements KnowledgeChunkService {
         if(document == null) {
             throw new ServiceException("解析文档为空");
         }
+        document.metadata().put("docId", docId);
+        document.metadata().put("file_name",knowledgeDocumentPO.getDocumentName());
         // 2.分块 （TODO解析文档复杂校验）
         List<TextSegment> textSegments = langChain4jSplitter.splitterToChunk(document, chunkOptions);
 
@@ -132,7 +130,7 @@ public class knowledgeChunkServiceImpl implements KnowledgeChunkService {
 
     /**
      * 删除指定知识块
-     * @param chunkId
+     * @param chunkId 知识块Id
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -147,7 +145,7 @@ public class knowledgeChunkServiceImpl implements KnowledgeChunkService {
         knowledgeChunkMapper.update(Wrappers
                 .<KnowledgeChunkPO>lambdaUpdate()
                 .eq(KnowledgeChunkPO::getId, chunkId)
-                .set(KnowledgeChunkPO::getDel_flag,1)
+                .set(KnowledgeChunkPO::getDelFlag,1)
         );
 
         // 3.删除Milvus数据库记录(暂时不删)
@@ -156,7 +154,6 @@ public class knowledgeChunkServiceImpl implements KnowledgeChunkService {
 
     /**
      * 新增单个知识块
-     * @param request
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -170,7 +167,7 @@ public class knowledgeChunkServiceImpl implements KnowledgeChunkService {
         String collection = knowledgeBasePO.getCollection();
         //转换为TextSegment
         TextSegment segment = TextSegment.from(chunkText);
-        List<TextSegment> segments = Arrays.asList(segment);
+        List<TextSegment> segments = List.of(segment);
         try {
             //向量化+持久存储
             List<Object> primaryKeys = vectorEmbedding.embed(segments, collection);
@@ -187,7 +184,6 @@ public class knowledgeChunkServiceImpl implements KnowledgeChunkService {
 
     /**
      * 修改知识块文本内容
-     * @param request
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -207,8 +203,6 @@ public class knowledgeChunkServiceImpl implements KnowledgeChunkService {
 
     /**
      * 分页查询分块列表
-     * @param request
-     * @return
      */
     @Override
     public IPage<KnowledgeChunkVO> pageQuery(PageQueryChunkRequest request) {
@@ -248,7 +242,7 @@ public class knowledgeChunkServiceImpl implements KnowledgeChunkService {
 
     private KnowledgeChunkPO toPO(TextSegment textSegment, Long kbId, Long docId, Long milvusId) {
         Metadata metadata = textSegment.metadata();
-        KnowledgeChunkPO chunkPO = KnowledgeChunkPO.builder()
+        return KnowledgeChunkPO.builder()
                 .kbId(kbId)
                 .docId(docId)
                 .milvusId(milvusId)
@@ -258,7 +252,6 @@ public class knowledgeChunkServiceImpl implements KnowledgeChunkService {
                 .tokenCount(estimateTokenCount(textSegment.text()))
                 .createBy(UserContext.getUsername())
                 .build();
-        return chunkPO;
     }
 
     /**

@@ -26,7 +26,6 @@ public interface KnowledgeChunkService {
 
     /**
      * 删除知识块
-     * @param chunkId
      */
     void remove(String chunkId);
 

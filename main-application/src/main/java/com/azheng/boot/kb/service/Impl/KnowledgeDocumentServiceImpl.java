@@ -16,6 +16,7 @@ import com.azheng.boot.kb.dao.po.KnowledgeChunkPO;
 import com.azheng.boot.kb.dao.po.KnowledgeDocumentPO;
 import com.azheng.boot.kb.service.FileValidationService;
 import com.azheng.boot.kb.service.KnowledgeDocumentService;
+import com.azheng.boot.kb.util.FileTypeUtil;
 import com.azheng.framework.context.UserContext;
 import com.azheng.framework.exception.ClientException;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -58,6 +59,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
     @Resource
     private knowledgeChunkServiceImpl knowledgeChunkServiceImpl;
+
 
     /**
      * 查询知识库下的文档
@@ -103,7 +105,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         try {
             FileValidationService.validateFile(file);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw new ClientException("文件类型不合法！");
         }
         KnowledgeBasePO knowledgeBasePO = knowledgeBaseMapper.selectById(kbId);
         Assert.notNull(knowledgeBasePO ,() -> new ClientException("知识库为空！"));
@@ -121,11 +123,13 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         try(InputStream inputStream = file.getInputStream()){
             RustFsClient.putObject(putObjectRequest, RequestBody.fromInputStream(inputStream, file.getSize()));
 
+            String contentType = file.getContentType();
+            String shortFileType = FileTypeUtil.getShortFileType(contentType);
             // 5.存储记录进MySQL（fileUrl暂时不设置）
             KnowledgeDocumentPO documentPO = KnowledgeDocumentPO
                     .builder()
                     .documentName(filename)
-                    .fileType(file.getContentType())
+                    .fileType(shortFileType)
                     .fileSize(file.getSize())
                     .kbId(Long.valueOf(kbId))
                     .createBy(UserContext.getUsername())
@@ -152,13 +156,13 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         knowledgeDocumentMapper.update(Wrappers
                                         .<KnowledgeDocumentPO>lambdaUpdate()
                                         .eq(KnowledgeDocumentPO::getId, docId)
-                                        .set(KnowledgeDocumentPO::getDel_flag,1)
+                                        .set(KnowledgeDocumentPO::getDelFlag,1)
         );
         //归属知识块删除
         knowledgeChunkMapper.update(Wrappers
                                     .<KnowledgeChunkPO>lambdaUpdate()
                                     .eq(KnowledgeChunkPO::getDocId, docId)
-                                    .set(KnowledgeChunkPO::getDel_flag,1)
+                                    .set(KnowledgeChunkPO::getDelFlag,1)
         );
     }
 
@@ -177,7 +181,6 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
     /**
      * 启动分块
-     * @param startChunkRequest
      */
     @Override
     public void startChunking(StartChunkRequest startChunkRequest) {

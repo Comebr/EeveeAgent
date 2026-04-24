@@ -73,5 +73,5 @@ public class KnowledgeDocumentPO {
     /**
      * 是否删除
      */
-    private Integer del_flag;
+    private Integer delFlag;
 }
