@@ -1,4 +1,4 @@
-package com.azheng.boot.rag.chunking;
+package com.azheng.boot.rag.core.chunking;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
