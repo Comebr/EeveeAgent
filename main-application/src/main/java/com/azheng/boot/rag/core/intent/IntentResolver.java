@@ -41,16 +41,15 @@ public class IntentResolver {
      */
     public List<SubQuestionIntent> resolve(RewriteResult rewriteResult) {
         List<String> subQuestions = new ArrayList<>();
-        subQuestions.add(rewriteResult.rewrittenQuestion());
         // 改动：子问题+精简问题 组合使用
         if(CollUtil.isNotEmpty(rewriteResult.subQuestions())){
             subQuestions.addAll(rewriteResult.subQuestions());
+        }else {
+            subQuestions.add(rewriteResult.rewrittenQuestion());
         }
-        // 避免精简问题和子问题完全重复
-        subQuestions = CollUtil.distinct(subQuestions);
 
         // 异步进行子问题意图识别
-/*        List<CompletableFuture<SubQuestionIntent>> tasks = subQuestions.stream()
+        List<CompletableFuture<SubQuestionIntent>> tasks = subQuestions.stream()
                 .map(q -> CompletableFuture.supplyAsync(
                         () -> new SubQuestionIntent(q, classifyIntents(q)),
                         intentClassifyExecutor
@@ -58,10 +57,12 @@ public class IntentResolver {
                 .toList();
         List<SubQuestionIntent> subIntents = tasks.stream()
                 .map(CompletableFuture::join)
-                .toList();*/
+                .toList();
+
+/*        //同步
         List<SubQuestionIntent> subIntents = subQuestions.stream()
                 .map(q -> new SubQuestionIntent(q, classifyIntents(q)))
-                .toList();
+                .toList();*/
         //拦截：若未检测出至少一个意图：滚蛋
 
 
