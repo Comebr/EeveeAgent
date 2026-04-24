@@ -1,6 +1,10 @@
 server:
   # 端口
   port: 9090
+  # Tomcat 配置
+  tomcat:
+    # 最大请求头大小（单位：字节）
+    max-http-header-size: 81920
 
 #---Sa-Token 配置---
 sa-token:
@@ -31,7 +35,7 @@ spring:
 
   #---MySQL数据配置---(暂定本地数据库、可迁移至docker)
   datasource:
-    url: jdbc:mysql://192.168.191.128:3306/eeveeagent?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://192.168.191.128:3306/eeveeagent?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -58,6 +62,7 @@ langchain4j:
       api-key: ${BAILIAN_API_KEY}
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       dimensions: 2048
+      rerank-model-name: qwen3-rerank
   # --OpenAI
   open-ai:
 
@@ -84,10 +89,18 @@ rag:
     dimension: 2048                     # 向量维度 → 必须和 embedding 模型一致
     metric-type: COSINE                 # 相似度算法（余弦相似度，正确）
 
+  search:
+    channels:
+      vector-global:
+        confidence-threshold: 0.6
+        top-k-multiplier: 3
+      intent-directed:
+        min-intent-score: 0.4
+        top-k-multiplier: 2
+
 
 intent:
   topk: 30
-
 
 
 
