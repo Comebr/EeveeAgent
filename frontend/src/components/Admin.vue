@@ -3030,14 +3030,8 @@ const copyToClipboard = (text) => {
             @click="setActiveMenu('knowledge')"
           >
             <span class="menu-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24">
-                <rect x="4" y="4" width="16" height="20" rx="2" ry="2" fill="currentColor"/>
-                <rect x="6" y="6" width="12" height="4" fill="#1E293B"/>
-                <circle cx="9" cy="8" r="1" fill="currentColor"/>
-                <rect x="6" y="12" width="12" height="4" fill="#1E293B"/>
-                <circle cx="9" cy="14" r="1" fill="currentColor"/>
-                <rect x="6" y="18" width="12" height="4" fill="#1E293B"/>
-                <circle cx="9" cy="20" r="1" fill="currentColor"/>
+              <svg width="18" height="18" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                <path d="M931.507892 0A78.65427 78.65427 0 0 1 1010.162162 78.65427v314.644757a78.65427 78.65427 0 0 1-78.65427 78.65427H92.492108A78.65427 78.65427 0 0 1 13.837838 393.271351V78.65427A78.65427 78.65427 0 0 1 92.492108 0h839.015784z m0 55.351351H92.492108A23.302919 23.302919 0 0 0 69.189189 78.65427v314.644757c0 12.869189 10.43373 23.302919 23.302919 23.302919h839.015784A23.302919 23.302919 0 0 0 954.810811 393.271351V78.65427A23.302919 23.302919 0 0 0 931.507892 55.351351z m0 470.486487A78.65427 78.65427 0 0 1 1010.162162 604.492108v314.644757a78.65427 78.65427 0 0 1-78.65427 78.65427H92.492108A78.65427 78.65427 0 0 1 13.837838 919.109189V604.492108A78.65427 78.65427 0 0 1 92.492108 525.837838h839.015784z m0 55.351351H92.492108a23.302919 23.302919 0 0 0-23.302919 23.302919v314.644757c0 12.869189 10.43373 23.302919 23.302919 23.302919h839.015784A23.302919 23.302919 0 0 0 954.810811 919.109189V604.492108a23.302919 23.302919 0 0 0-23.302919-23.302919z" p-id="9678" fill="white"></path><path d="M249.081081 305.235027a69.189189 69.189189 0 1 1 0-138.378378 69.189189 69.189189 0 0 1 0 138.378378z m0 525.754811a69.189189 69.189189 0 1 1 0-138.378379 69.189189 69.189189 0 0 1 0 138.378379z" p-id="9679" fill="white"></path>
               </svg>
             </span>
             <span class="menu-text" v-show="!sidebarCollapsed">知识库管理</span>
@@ -3048,10 +3042,8 @@ const copyToClipboard = (text) => {
             @click="setActiveMenu('intent')"
           >
             <span class="menu-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              <svg width="20" height="20" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                <path d="M207.36 656H110.08a96 96 0 0 1-96-96V462.72a96 96 0 0 1 96-96h97.28a96 96 0 0 1 96 96v97.28a96 96 0 0 1-96 96zM110.08 430.72a32 32 0 0 0-32 32v97.28a32 32 0 0 0 32 32h97.28a32 32 0 0 0 32-32V462.72a32 32 0 0 0-32-32zM920.96 296.96h-97.92a96 96 0 0 1-96-96V103.68a96 96 0 0 1 96-96h97.92a96 96 0 0 1 95.36 96v97.28a96 96 0 0 1-95.36 96z m-97.92-225.28a32 32 0 0 0-32 32v97.28a32 32 0 0 0 32 32h97.92a31.36 31.36 0 0 0 31.36-32V103.68a31.36 31.36 0 0 0-31.36-32zM920.96 656h-97.92a96 96 0 0 1-96-96V462.72a96 96 0 0 1 96-96h97.92a96 96 0 0 1 95.36 96v97.28a96 96 0 0 1-95.36 96z m-97.92-225.28a32 32 0 0 0-32 32v97.28a32 32 0 0 0 32 32h97.92a31.36 31.36 0 0 0 31.36-32V462.72a31.36 31.36 0 0 0-31.36-32zM920.96 1015.04h-97.92a96 96 0 0 1-96-96v-97.28a96 96 0 0 1 96-96h97.92a96 96 0 0 1 95.36 96v97.28a96 96 0 0 1-95.36 96z m-97.92-225.28a32 32 0 0 0-32 32v97.28a32 32 0 0 0 32 32h97.92a31.36 31.36 0 0 0 31.36-32v-97.28a31.36 31.36 0 0 0-31.36-32zM673.92 912.64H478.08a32 32 0 0 1-32-32V152.32a32 32 0 0 1 32-32h195.84a32 32 0 0 1 0 64H512v664.32h163.84a32 32 0 0 1 32 32 32 32 0 0 1-33.92 32z" p-id="17194" fill="white"></path><path d="M664.96 548.48h-320a32.64 32.64 0 0 1-32-32 32 32 0 0 1 32-32h320a32 32 0 0 1 32 32 32 32 0 0 1-32 32z" p-id="17195" fill="white"></path>
               </svg>
             </span>
             <span class="menu-text" v-show="!sidebarCollapsed">意图管理</span>
@@ -3062,22 +3054,20 @@ const copyToClipboard = (text) => {
             @click="setActiveMenu('samples')"
           >
             <span class="menu-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                <line x1="9" y1="10" x2="15" y2="10"/>
-                <line x1="9" y1="14" x2="15" y2="14"/>
+              <svg width="20" height="20" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                <path d="M544 789.333h105.173a10.667 10.667 0 0 0 10.667-10.666v-0.363L656.608 684a32 32 0 0 1 14.293-27.765C750.933 603.189 800 513.792 800 416c0-159.061-128.939-288-288-288S224 256.939 224 416c0 97.813 49.099 187.232 129.141 240.267a32 32 0 0 1 14.315 25.578l3.339 97.184a10.667 10.667 0 0 0 10.666 10.304H480v-216.64l-76.64-81.429a32 32 0 0 1 46.613-43.861l63.36 67.328 72.694-68.662a32 32 0 0 1 43.946 46.528L544 573.792v215.541zM864 416a351.53 351.53 0 0 1-142.827 283.147l2.635 76.96a74.667 74.667 0 0 1-74.635 77.226H381.44a74.667 74.667 0 0 1-74.624-72.106l-2.784-81.195A351.541 351.541 0 0 1 160 416c0-194.4 157.6-352 352-352s352 157.6 352 352zM416 960a32 32 0 0 1 0-64h192a32 32 0 0 1 0 64H416z" p-id="5447" fill="white"></path>
               </svg>
             </span>
             <span class="menu-text" v-show="!sidebarCollapsed">示例管理</span>
           </div>
         </div>
       </div>
-      
+
       <!-- 系统 -->
       <div class="sidebar-section">
         <h3 class="section-title" v-show="!sidebarCollapsed">系统</h3>
         <div class="menu-list">
-          <div 
+          <div
             class="menu-item"
             :class="{ active: activeMenu === 'users' }"
             @click="setActiveMenu('users')"
@@ -3092,22 +3082,21 @@ const copyToClipboard = (text) => {
             </span>
             <span class="menu-text" v-show="!sidebarCollapsed">用户管理</span>
           </div>
-          <div 
+          <div
             class="menu-item"
             :class="{ active: activeMenu === 'settings' }"
             @click="setActiveMenu('settings')"
           >
             <span class="menu-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              <svg width="20" height="20" viewBox="0 0 1035 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                <path d="M540.842667 932.977778H170.666667a170.666667 170.666667 0 0 1-170.666667-170.666667V284.444444a170.666667 170.666667 0 0 1 170.666667-170.666666h682.666666a170.666667 170.666667 0 0 1 170.666667 170.666666v113.379556a34.133333 34.133333 0 0 1-68.266667 0V284.444444a102.4 102.4 0 0 0-102.4-102.4H170.666667a102.4 102.4 0 0 0-102.4 102.4v477.866667a102.4 102.4 0 0 0 102.4 102.4h370.176a34.133333 34.133333 0 0 1 0 68.266667z" p-id="20352" fill="white"></path><path d="M200.988444 365.112889m34.133334 0l272.782222 0q34.133333 0 34.133333 34.133333l0-0.056889q0 34.133333-34.133333 34.133334l-272.782222 0q-34.133333 0-34.133334-34.133334l0 0.056889q0-34.133333 34.133334-34.133333Z" p-id="20353" fill="white"></path><path d="M200.931556 607.288889m34.133333 0l136.362667 0q34.133333 0 34.133333 34.133333l0-0.056889q0 34.133333-34.133333 34.133334l-136.362667 0q-34.133333 0-34.133333-34.133334l0 0.056889q0-34.133333 34.133333-34.133333Z" p-id="20354" fill="white"></path><path d="M1019.221333 721.692444l-93.184 168.96a37.717333 37.717333 0 0 1-32.995555 19.569778h-185.002667a37.717333 37.717333 0 0 1-32.995555-19.569778l-93.184-168.96a38.513778 38.513778 0 0 1 0-37.148444l93.184-168.96a37.717333 37.717333 0 0 1 32.995555-19.569778h185.059556a37.717333 37.717333 0 0 1 32.995555 19.569778l93.184 168.96a38.513778 38.513778 0 0 1-0.056889 37.148444z m-28.444444-15.928888a5.688889 5.688889 0 0 0 0-5.290667l-93.013333-168.96a5.347556 5.347556 0 0 0-4.721778-2.787556h-184.888889a5.347556 5.347556 0 0 0-4.721778 2.787556l-93.013333 168.96a5.688889 5.688889 0 0 0 0 5.290667l93.013333 168.96a5.347556 5.347556 0 0 0 4.721778 2.787555h184.718222a5.347556 5.347556 0 0 0 4.721778-2.787555z m-191.488 82.432a87.210667 87.210667 0 1 1 87.210667-87.210667 87.210667 87.210667 0 0 1-87.381334 87.267555z m0-32.711112a54.499556 54.499556 0 1 0-54.499556-54.499555 54.499556 54.499556 0 0 0 54.328889 54.556444z" p-id="20355" fill="white"></path>
               </svg>
             </span>
             <span class="menu-text" v-show="!sidebarCollapsed">系统设置</span>
           </div>
         </div>
       </div>
-      
+
       <!-- 底部收起按钮 -->
       <div class="sidebar-footer">
         <button class="collapse-button" @click="toggleSidebar">
@@ -3116,7 +3105,7 @@ const copyToClipboard = (text) => {
         </button>
       </div>
     </aside>
-    
+
     <!-- 主内容区 -->
     <main class="main-content">
       <!-- 顶部header -->
@@ -3128,14 +3117,14 @@ const copyToClipboard = (text) => {
               <circle cx="11" cy="11" r="8"/>
               <path d="M21 21l-4.35-4.35"/>
             </svg>
-            <input 
-              type="text" 
-              placeholder="搜索..." 
+            <input
+              type="text"
+              placeholder="搜索..."
               v-model="searchQuery"
             />
           </div>
         </div>
-        
+
         <div class="header-right">
           <!-- 返回首页按钮 -->
           <button class="back-button" @click="goToHome">
@@ -3145,14 +3134,14 @@ const copyToClipboard = (text) => {
             </svg>
             <span>返回首页</span>
           </button>
-          
+
           <!-- 用户信息 -->
           <div class="user-info">
             <div class="user-dropdown" @click="toggleUserDropdown">
               <div class="avatar">
-                <img 
-                  v-if="userInfo?.avatar && userInfo.avatar.trim()" 
-                  :src="userInfo.avatar" 
+                <img
+                  v-if="userInfo?.avatar && userInfo.avatar.trim()"
+                  :src="userInfo.avatar"
                   alt="avatar"
                   @error="handleAvatarError"
                 />
@@ -3177,7 +3166,7 @@ const copyToClipboard = (text) => {
           </div>
         </div>
       </header>
-      
+
       <!-- 面包屑 -->
       <div class="breadcrumb">
         <span class="breadcrumb-link" @click="setActiveMenu('overview')">首页</span>
@@ -3190,7 +3179,7 @@ const copyToClipboard = (text) => {
         <span v-if="activeMenu === 'knowledge' && activeTab === 'chunks'" class="separator">/</span>
         <span v-if="activeMenu === 'knowledge' && activeTab === 'chunks'" class="current">知识块管理</span>
       </div>
-      
+
       <!-- 内容区域 -->
       <div class="content-area">
         <!-- 这里根据activeMenu显示不同的内容 -->
@@ -3220,7 +3209,7 @@ const copyToClipboard = (text) => {
               </BaseButton>
             </div>
           </div>
-          
+
           <!-- 内容区域 -->
           <div class="intent-management-container">
             <!-- 左侧意图树结构 -->
@@ -3241,13 +3230,13 @@ const copyToClipboard = (text) => {
                 </div>
                 <div v-else class="tree-content">
                   <div v-for="node in intentTree" :key="node.id" class="tree-node">
-                    <div 
-                      class="node-item" 
+                    <div
+                      class="node-item"
                       :class="{ selected: selectedNode?.id === node.id }"
                       @click="selectNode(node)"
                     >
-                      <div 
-                        class="node-toggle" 
+                      <div
+                        class="node-toggle"
                         v-if="node.children && node.children.length > 0"
                         @click.stop="toggleNode(node)"
                       >
@@ -3262,13 +3251,13 @@ const copyToClipboard = (text) => {
                     </div>
                     <div v-if="node.children && node.children.length > 0 && expandedNodes.has(node.id)" class="node-children">
                       <div v-for="child in node.children" :key="child.id" class="tree-node">
-                        <div 
-                          class="node-item" 
+                        <div
+                          class="node-item"
                           :class="{ selected: selectedNode?.id === child.id }"
                           @click="selectNode(child)"
                         >
-                          <div 
-                            class="node-toggle" 
+                          <div
+                            class="node-toggle"
                             v-if="child.children && child.children.length > 0"
                             @click.stop="toggleNode(child)"
                           >
@@ -3283,8 +3272,8 @@ const copyToClipboard = (text) => {
                         </div>
                         <div v-if="child.children && child.children.length > 0 && expandedNodes.has(child.id)" class="node-children">
                           <div v-for="grandchild in child.children" :key="grandchild.id" class="tree-node">
-                            <div 
-                              class="node-item" 
+                            <div
+                              class="node-item"
                               :class="{ selected: selectedNode?.id === grandchild.id }"
                               @click="selectNode(grandchild)"
                             >
@@ -3303,7 +3292,7 @@ const copyToClipboard = (text) => {
                 </div>
               </div>
             </div>
-            
+
             <!-- 右侧节点详情 -->
             <div class="node-detail-panel">
               <div class="panel-header">
@@ -3355,9 +3344,9 @@ const copyToClipboard = (text) => {
                       <span class="node-code" style="font-weight: bold;">{{ selectedNode.intentCode }}</span>
                     </div>
                   </div>
-                  
+
                   <!-- 节点操作 - 已移动到面板头部 -->
-                  
+
                   <!-- 详细信息 -->
                   <div class="detail-section">
                     <h4 class="section-title">基本信息</h4>
@@ -3380,20 +3369,20 @@ const copyToClipboard = (text) => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div class="detail-section">
                     <h4 class="section-title">描述</h4>
                     <div class="description-content">
                       {{ selectedNode.description || '无描述' }}
                     </div>
                   </div>
-                  
+
                   <div class="detail-section">
                     <h4 class="section-title">示例问题</h4>
                     <div class="example-tags">
-                      <span 
-                        v-for="(example, index) in parseExamples(selectedNode.examples)" 
-                        :key="index" 
+                      <span
+                        v-for="(example, index) in parseExamples(selectedNode.examples)"
+                        :key="index"
                         class="example-tag"
                         @dblclick="copyToClipboard(example)"
                       >
@@ -3404,14 +3393,14 @@ const copyToClipboard = (text) => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <!-- 提示词模板 - 已隐藏 -->
                   <!-- <div class="detail-section">
                     <h4 class="section-title">提示词模板</h4>
                     <div class="prompt-section">
-                      <textarea 
-                        class="prompt-textarea" 
-                        :value="selectedNode.promptTemplate || '无模板'" 
+                      <textarea
+                        class="prompt-textarea"
+                        :value="selectedNode.promptTemplate || '无模板'"
                         readonly
                       ></textarea>
                     </div>
@@ -3420,7 +3409,7 @@ const copyToClipboard = (text) => {
               </div>
             </div>
           </div>
-          
+
           <!-- 新建节点模态框 -->
           <div v-if="showIntentCreateModal" class="modal-overlay">
             <div class="modal create-modal">
@@ -3435,27 +3424,27 @@ const copyToClipboard = (text) => {
                     <div class="form-grid">
                       <div class="form-item">
                         <label class="form-label">节点名称 <span class="required">*</span></label>
-                        <input 
-                          type="text" 
-                          v-model="intentCreateForm.name" 
-                          placeholder="例如：OA系统" 
+                        <input
+                          type="text"
+                          v-model="intentCreateForm.name"
+                          placeholder="例如：OA系统"
                           class="form-input"
                           required
                         />
                       </div>
                       <div class="form-item">
                         <label class="form-label">意图标识</label>
-                        <input 
-                          type="text" 
-                          v-model="intentCreateForm.intentCode" 
-                          placeholder="例如：biz-oa" 
+                        <input
+                          type="text"
+                          v-model="intentCreateForm.intentCode"
+                          placeholder="例如：biz-oa"
                           class="form-input"
                         />
                       </div>
                       <div class="form-item">
                         <label class="form-label">层级 <span class="required">*</span></label>
-                        <select 
-                          v-model="intentCreateForm.level" 
+                        <select
+                          v-model="intentCreateForm.level"
                           class="form-select"
                           required
                         >
@@ -3466,8 +3455,8 @@ const copyToClipboard = (text) => {
                       </div>
                       <div class="form-item">
                         <label class="form-label">类型 <span class="required">*</span></label>
-                        <select 
-                          v-model="intentCreateForm.kind" 
+                        <select
+                          v-model="intentCreateForm.kind"
                           class="form-select"
                           required
                         >
@@ -3477,7 +3466,7 @@ const copyToClipboard = (text) => {
                         </select>
                       </div>
                     </div>
-                    
+
                     <!-- 父节点 -->
                     <div class="form-row">
                       <div class="form-item full-width">
@@ -3488,8 +3477,8 @@ const copyToClipboard = (text) => {
                             <span class="select-arrow">{{ parentSelectOpen ? '▼' : '▶' }}</span>
                           </div>
                           <div v-if="parentSelectOpen" class="custom-select-options">
-                            <div 
-                              v-for="option in parentOptions" 
+                            <div
+                              v-for="option in parentOptions"
                               :key="option.value"
                               class="custom-select-option"
                               :class="{ selected: intentCreateForm.parentCode === option.value }"
@@ -3501,13 +3490,13 @@ const copyToClipboard = (text) => {
                         </div>
                       </div>
                     </div>
-                    
+
                     <!-- 知识库 -->
                     <div class="form-row">
                       <div class="form-item full-width">
                         <label class="form-label">知识库</label>
-                        <select 
-                          v-model="intentCreateForm.kbId" 
+                        <select
+                          v-model="intentCreateForm.kbId"
                           class="form-select"
                         >
                           <option value="" disabled selected>请选择知识库</option>
@@ -3517,7 +3506,7 @@ const copyToClipboard = (text) => {
                         </select>
                       </div>
                     </div>
-                    
+
                     <!-- 描述与示例 -->
                     <div class="form-section">
                       <div class="section-header" @click="descriptionExpanded = !descriptionExpanded">
@@ -3527,9 +3516,9 @@ const copyToClipboard = (text) => {
                       <div v-if="descriptionExpanded" class="section-content">
                         <div class="form-item">
                           <label class="form-label">描述</label>
-                          <textarea 
-                            v-model="intentCreateForm.description" 
-                            placeholder="节点的语义说明与说明场景" 
+                          <textarea
+                            v-model="intentCreateForm.description"
+                            placeholder="节点的语义说明与说明场景"
                             class="form-textarea"
                             rows="4"
                           ></textarea>
@@ -3538,9 +3527,9 @@ const copyToClipboard = (text) => {
                           <label class="form-label">示例问题</label>
                           <!-- 标签显示区域 -->
                           <div class="example-tags">
-                            <span 
-                              v-for="tag in exampleTags" 
-                              :key="tag" 
+                            <span
+                              v-for="tag in exampleTags"
+                              :key="tag"
                               class="example-tag"
                             >
                               {{ tag }}
@@ -3549,9 +3538,9 @@ const copyToClipboard = (text) => {
                           </div>
                           <!-- 输入区域 -->
                           <div class="example-input">
-                            <input 
-                              type="text" 
-                              v-model="newExampleTag" 
+                            <input
+                              type="text"
+                              v-model="newExampleTag"
                               placeholder="输入示例问题并按回车添加"
                               @keyup.enter="addExampleTag"
                               class="example-input-field"
@@ -3559,15 +3548,15 @@ const copyToClipboard = (text) => {
                             <BaseButton type="primary" size="small" @click="addExampleTag">添加</BaseButton>
                           </div>
                           <!-- 隐藏的textarea用于保持数据绑定 -->
-                          <textarea 
-                            v-model="intentCreateForm.examplesText" 
+                          <textarea
+                            v-model="intentCreateForm.examplesText"
                             class="hidden-textarea"
                             @input="syncExampleTags"
                           ></textarea>
                         </div>
                       </div>
                     </div>
-                    
+
                     <!-- Prompt 配置 -->
                     <div class="form-section">
                       <div class="section-header" @click="promptExpanded = !promptExpanded">
@@ -3577,25 +3566,25 @@ const copyToClipboard = (text) => {
                       <div v-if="promptExpanded" class="section-content">
                         <div class="form-item">
                           <label class="form-label">短规则片段（可选）</label>
-                          <textarea 
-                            v-model="intentCreateForm.promptSnippet" 
-                            placeholder="多意图场景下的特定规则，会添加到整体提示词中" 
+                          <textarea
+                            v-model="intentCreateForm.promptSnippet"
+                            placeholder="多意图场景下的特定规则，会添加到整体提示词中"
                             class="form-textarea"
                             rows="3"
                           ></textarea>
                         </div>
                         <div class="form-item">
                           <label class="form-label">Prompt模板（可选）</label>
-                          <textarea 
-                            v-model="intentCreateForm.promptTemplate" 
-                            placeholder="场景用的完整Prompt模板，KB和MCP节点都可配置" 
+                          <textarea
+                            v-model="intentCreateForm.promptTemplate"
+                            placeholder="场景用的完整Prompt模板，KB和MCP节点都可配置"
                             class="form-textarea"
                             rows="5"
                           ></textarea>
                         </div>
                       </div>
                     </div>
-                    
+
                     <!-- 高级设置 -->
                     <div class="form-section">
                       <div class="section-header" @click="advancedExpanded = !advancedExpanded">
@@ -3606,19 +3595,19 @@ const copyToClipboard = (text) => {
                         <div class="form-grid">
                           <div class="form-item">
                             <label class="form-label">节点 TopK（可选）</label>
-                            <input 
-                              type="number" 
-                              v-model="intentCreateForm.topK" 
-                              placeholder="留空则使用全局 TopK" 
+                            <input
+                              type="number"
+                              v-model="intentCreateForm.topK"
+                              placeholder="留空则使用全局 TopK"
                               class="form-input"
                             />
                           </div>
                           <div class="form-item">
                             <label class="form-label">排序</label>
-                            <input 
-                              type="number" 
-                              v-model="intentCreateForm.sortOrder" 
-                              placeholder="0" 
+                            <input
+                              type="number"
+                              v-model="intentCreateForm.sortOrder"
+                              placeholder="0"
                               class="form-input"
                             />
                           </div>
@@ -3626,9 +3615,9 @@ const copyToClipboard = (text) => {
                         <div class="form-item">
                           <label class="form-label">启用节点</label>
                           <div class="form-switch">
-                            <input 
-                              type="checkbox" 
-                              v-model="intentCreateForm.enabled" 
+                            <input
+                              type="checkbox"
+                              v-model="intentCreateForm.enabled"
                               id="enabled-switch"
                             />
                             <label for="enabled-switch" class="switch-label"></label>
@@ -3636,7 +3625,7 @@ const copyToClipboard = (text) => {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div class="form-actions">
                       <BaseButton type="secondary" @click="showIntentCreateModal = false">取消</BaseButton>
                       <BaseButton type="primary" buttonType="submit">创建</BaseButton>
@@ -3646,7 +3635,7 @@ const copyToClipboard = (text) => {
               </ScrollableContainer>
             </div>
           </div>
-          
+
           <!-- 编辑节点模态框 -->
           <div v-if="showIntentEditModal" class="modal-overlay">
             <div class="modal">
@@ -3661,27 +3650,27 @@ const copyToClipboard = (text) => {
                     <div class="form-grid">
                       <div class="form-item">
                         <label class="form-label">节点名称 <span class="required">*</span></label>
-                        <input 
-                          type="text" 
-                          v-model="intentCreateForm.name" 
-                          placeholder="例如：OA系统" 
+                        <input
+                          type="text"
+                          v-model="intentCreateForm.name"
+                          placeholder="例如：OA系统"
                           class="form-input"
                           required
                         />
                       </div>
                       <div class="form-item">
                         <label class="form-label">意图标识</label>
-                        <input 
-                          type="text" 
-                          v-model="intentCreateForm.intentCode" 
-                          placeholder="例如：biz-oa" 
+                        <input
+                          type="text"
+                          v-model="intentCreateForm.intentCode"
+                          placeholder="例如：biz-oa"
                           class="form-input"
                         />
                       </div>
                       <div class="form-item">
                         <label class="form-label">层级 <span class="required">*</span></label>
-                        <select 
-                          v-model="intentCreateForm.level" 
+                        <select
+                          v-model="intentCreateForm.level"
                           class="form-select"
                           required
                         >
@@ -3692,8 +3681,8 @@ const copyToClipboard = (text) => {
                       </div>
                       <div class="form-item">
                         <label class="form-label">类型 <span class="required">*</span></label>
-                        <select 
-                          v-model="intentCreateForm.kind" 
+                        <select
+                          v-model="intentCreateForm.kind"
                           class="form-select"
                           required
                         >
@@ -3703,7 +3692,7 @@ const copyToClipboard = (text) => {
                         </select>
                       </div>
                     </div>
-                    
+
                     <!-- 父节点 -->
                     <div class="form-row">
                       <div class="form-item full-width">
@@ -3714,8 +3703,8 @@ const copyToClipboard = (text) => {
                             <span class="select-arrow">{{ parentSelectOpen ? '▼' : '▶' }}</span>
                           </div>
                           <div v-if="parentSelectOpen" class="custom-select-options">
-                            <div 
-                              v-for="option in parentOptions" 
+                            <div
+                              v-for="option in parentOptions"
                               :key="option.value"
                               class="custom-select-option"
                               :class="{ selected: intentCreateForm.parentCode === option.value }"
@@ -3727,13 +3716,13 @@ const copyToClipboard = (text) => {
                         </div>
                       </div>
                     </div>
-                    
+
                     <!-- 知识库 -->
                     <div class="form-row">
                       <div class="form-item full-width">
                         <label class="form-label">Collection名称</label>
-                        <select 
-                          v-model="intentCreateForm.kbId" 
+                        <select
+                          v-model="intentCreateForm.kbId"
                           class="form-select"
                         >
                           <option value="">请选择知识库</option>
@@ -3743,7 +3732,7 @@ const copyToClipboard = (text) => {
                         </select>
                       </div>
                     </div>
-                    
+
                     <!-- 描述与示例 -->
                     <div class="form-section">
                       <div class="section-header" @click="descriptionExpanded = !descriptionExpanded">
@@ -3753,9 +3742,9 @@ const copyToClipboard = (text) => {
                       <div v-if="descriptionExpanded" class="section-content">
                         <div class="form-item">
                           <label class="form-label">描述</label>
-                          <textarea 
-                            v-model="intentCreateForm.description" 
-                            placeholder="节点的语义说明与说明场景" 
+                          <textarea
+                            v-model="intentCreateForm.description"
+                            placeholder="节点的语义说明与说明场景"
                             class="form-textarea"
                             rows="4"
                           ></textarea>
@@ -3764,9 +3753,9 @@ const copyToClipboard = (text) => {
                           <label class="form-label">示例问题</label>
                           <!-- 标签显示区域 -->
                           <div class="example-tags">
-                            <span 
-                              v-for="tag in exampleTags" 
-                              :key="tag" 
+                            <span
+                              v-for="tag in exampleTags"
+                              :key="tag"
                               class="example-tag"
                             >
                               {{ tag }}
@@ -3775,9 +3764,9 @@ const copyToClipboard = (text) => {
                           </div>
                           <!-- 输入区域 -->
                           <div class="example-input">
-                            <input 
-                              type="text" 
-                              v-model="newExampleTag" 
+                            <input
+                              type="text"
+                              v-model="newExampleTag"
                               placeholder="输入示例问题并按回车添加"
                               @keyup.enter="addExampleTag"
                               class="example-input-field"
@@ -3785,15 +3774,15 @@ const copyToClipboard = (text) => {
                             <BaseButton type="primary" size="small" @click="addExampleTag">添加</BaseButton>
                           </div>
                           <!-- 隐藏的textarea用于保持数据绑定 -->
-                          <textarea 
-                            v-model="intentCreateForm.examplesText" 
+                          <textarea
+                            v-model="intentCreateForm.examplesText"
                             class="hidden-textarea"
                             @input="syncExampleTags"
                           ></textarea>
                         </div>
                       </div>
                     </div>
-                    
+
                     <!-- Prompt 配置 -->
                     <div class="form-section">
                       <div class="section-header" @click="promptExpanded = !promptExpanded">
@@ -3803,25 +3792,25 @@ const copyToClipboard = (text) => {
                       <div v-if="promptExpanded" class="section-content">
                         <div class="form-item">
                           <label class="form-label">短规则片段（可选）</label>
-                          <textarea 
-                            v-model="intentCreateForm.promptSnippet" 
-                            placeholder="多意图场景下的特定规则，会添加到整体提示词中" 
+                          <textarea
+                            v-model="intentCreateForm.promptSnippet"
+                            placeholder="多意图场景下的特定规则，会添加到整体提示词中"
                             class="form-textarea"
                             rows="3"
                           ></textarea>
                         </div>
                         <div class="form-item">
                           <label class="form-label">Prompt模板（可选）</label>
-                          <textarea 
-                            v-model="intentCreateForm.promptTemplate" 
-                            placeholder="场景用的完整Prompt模板，KB和MCP节点都可配置" 
+                          <textarea
+                            v-model="intentCreateForm.promptTemplate"
+                            placeholder="场景用的完整Prompt模板，KB和MCP节点都可配置"
                             class="form-textarea"
                             rows="5"
                           ></textarea>
                         </div>
                       </div>
                     </div>
-                    
+
                     <!-- 高级设置 -->
                     <div class="form-section">
                       <div class="section-header" @click="advancedExpanded = !advancedExpanded">
@@ -3832,19 +3821,19 @@ const copyToClipboard = (text) => {
                         <div class="form-grid">
                           <div class="form-item">
                             <label class="form-label">节点 TopK（可选）</label>
-                            <input 
-                              type="number" 
-                              v-model="intentCreateForm.topK" 
-                              placeholder="留空则使用全局 TopK" 
+                            <input
+                              type="number"
+                              v-model="intentCreateForm.topK"
+                              placeholder="留空则使用全局 TopK"
                               class="form-input"
                             />
                           </div>
                           <div class="form-item">
                             <label class="form-label">排序</label>
-                            <input 
-                              type="number" 
-                              v-model="intentCreateForm.sortOrder" 
-                              placeholder="数值越小越靠前" 
+                            <input
+                              type="number"
+                              v-model="intentCreateForm.sortOrder"
+                              placeholder="数值越小越靠前"
                               class="form-input"
                             />
                           </div>
@@ -3852,9 +3841,9 @@ const copyToClipboard = (text) => {
                         <div class="form-item">
                           <label class="form-label">状态</label>
                           <div class="form-switch">
-                            <input 
-                              type="checkbox" 
-                              v-model="intentCreateForm.enabled" 
+                            <input
+                              type="checkbox"
+                              v-model="intentCreateForm.enabled"
                               id="enabled-switch"
                             />
                             <label for="enabled-switch" class="switch-label"></label>
@@ -3862,7 +3851,7 @@ const copyToClipboard = (text) => {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div class="form-actions">
                       <BaseButton type="secondary" @click="showIntentEditModal = false">取消</BaseButton>
                       <BaseButton type="primary" buttonType="submit">保存</BaseButton>
@@ -3872,7 +3861,7 @@ const copyToClipboard = (text) => {
               </ScrollableContainer>
             </div>
           </div>
-          
+
           <!-- 删除确认模态框 -->
           <div v-if="showIntentDeleteConfirm" class="modal-overlay">
             <div class="modal">
@@ -3898,7 +3887,7 @@ const copyToClipboard = (text) => {
             </div>
           </div>
         </div>
-        
+
         <div v-else-if="activeMenu === 'knowledge'" class="page-content knowledge-page">
           <div v-if="activeTab === 'knowledge'">
             <!-- 页面标题和操作栏 -->
@@ -3909,9 +3898,9 @@ const copyToClipboard = (text) => {
               </div>
               <div class="header-right">
                 <div class="search-box">
-                  <input 
-                    type="text" 
-                    placeholder="搜索知识库名称" 
+                  <input
+                    type="text"
+                    placeholder="搜索知识库名称"
                     v-model="searchQuery"
                     @keyup.enter="fetchKnowledgeList"
                   />
@@ -3937,7 +3926,7 @@ const copyToClipboard = (text) => {
                 </button>
               </div>
             </div>
-            
+
             <!-- 数据卡片 -->
             <div class="data-cards" style="margin-bottom: 24px;">
               <div class="card">
@@ -3973,12 +3962,12 @@ const copyToClipboard = (text) => {
                 </div>
               </div>
             </div>
-            
+
             <!-- 知识库表格 -->
             <div class="knowledge-table">
-              <BaseTable 
-                :columns="knowledgeColumns" 
-                :data="knowledgeList" 
+              <BaseTable
+                :columns="knowledgeColumns"
+                :data="knowledgeList"
                 :total="pagination.total"
                 :currentPage="pagination.current"
                 :pageSize="pagination.size"
@@ -4008,12 +3997,12 @@ const copyToClipboard = (text) => {
               </BaseTable>
             </div>
           </div>
-          
+
           <div v-else-if="activeTab === 'documents'">
             <!-- 文档管理 -->
             <div class="document-management">
 
-              
+
               <!-- 页面头部 -->
               <div class="page-header">
                 <div class="header-left">
@@ -4043,9 +4032,9 @@ const copyToClipboard = (text) => {
               <!-- 搜索和筛选 -->
               <div class="search-filter">
                 <div class="search-box">
-                  <input 
-                    type="text" 
-                    v-model="searchQuery" 
+                  <input
+                    type="text"
+                    v-model="searchQuery"
                     placeholder="搜索文档名称"
                     @keyup.enter="handleDocumentSearch"
                   />
@@ -4073,9 +4062,9 @@ const copyToClipboard = (text) => {
 
               <!-- 文档列表 -->
               <div class="document-list">
-                <BaseTable 
-                  :columns="documentColumns" 
-                  :data="documents" 
+                <BaseTable
+                  :columns="documentColumns"
+                  :data="documents"
                   :total="documentPagination.total"
                   :currentPage="documentPagination.current"
                   :pageSize="documentPagination.size"
@@ -4168,9 +4157,9 @@ const copyToClipboard = (text) => {
               <!-- 搜索和筛选 -->
               <div class="search-filter">
                 <div class="search-box">
-                  <input 
-                    type="text" 
-                    v-model="chunkSearchQuery" 
+                  <input
+                    type="text"
+                    v-model="chunkSearchQuery"
                     placeholder="搜索知识块内容"
                     @keyup.enter="loadChunks(selectedDocument.id)"
                   />
@@ -4202,9 +4191,9 @@ const copyToClipboard = (text) => {
 
               <!-- 知识块列表 -->
               <div class="chunk-list">
-                <BaseTable 
-                  :columns="chunkColumns" 
-                  :data="chunks" 
+                <BaseTable
+                  :columns="chunkColumns"
+                  :data="chunks"
                   :total="chunkPagination.total"
                   :currentPage="chunkPagination.current"
                   :pageSize="chunkPagination.size"
@@ -4275,7 +4264,7 @@ const copyToClipboard = (text) => {
         </div>
       </div>
     </main>
-    
+
     <!-- 创建知识库弹窗 -->
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
       <div class="modal-content">
@@ -4291,9 +4280,9 @@ const copyToClipboard = (text) => {
         <div class="modal-body">
           <div class="form-group">
             <label>知识库名称 <span class="required">*</span></label>
-            <input 
-              v-model="createForm.kbName" 
-              type="text" 
+            <input
+              v-model="createForm.kbName"
+              type="text"
               placeholder="请输入知识库名称"
             />
           </div>
@@ -4305,9 +4294,9 @@ const copyToClipboard = (text) => {
           </div>
           <div class="form-group">
             <label>Collection名称 <span class="required">*</span></label>
-            <input 
-              v-model="createForm.collection" 
-              type="text" 
+            <input
+              v-model="createForm.collection"
+              type="text"
               placeholder="请输入Collection名称"
             />
           </div>
@@ -4318,7 +4307,7 @@ const copyToClipboard = (text) => {
         </div>
       </div>
     </div>
-    
+
     <!-- 编辑知识库弹窗 -->
     <div v-if="showEditModal" class="modal-overlay" @click.self="showEditModal = false">
       <div class="modal-content">
@@ -4334,9 +4323,9 @@ const copyToClipboard = (text) => {
         <div class="modal-body">
           <div class="form-group">
             <label>知识库名称 <span class="required">*</span></label>
-            <input 
-              v-model="editingItem.name" 
-              type="text" 
+            <input
+              v-model="editingItem.name"
+              type="text"
               placeholder="请输入知识库名称"
             />
           </div>
@@ -4347,7 +4336,7 @@ const copyToClipboard = (text) => {
         </div>
       </div>
     </div>
-    
+
     <!-- 删除确认弹窗 -->
     <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="handleDeleteCancel">
       <div class="modal-content delete-modal">
@@ -4404,7 +4393,7 @@ const copyToClipboard = (text) => {
             <input type="file" ref="fileInput" class="file-input" @change="handleFileSelect" />
             <button class="browse-button" @click="$refs.fileInput.click()">浏览文件</button>
           </div>
-          
+
           <!-- 显示选择的文件 -->
           <div v-if="selectedFiles.length > 0" class="selected-files">
             <div class="file-item">
@@ -4427,7 +4416,7 @@ const copyToClipboard = (text) => {
               </button>
             </div>
           </div>
-          
+
           <!-- 文档信息表单 -->
           <div class="document-form" v-if="selectedFiles.length > 0">
             <div class="form-row">
@@ -4451,7 +4440,7 @@ const copyToClipboard = (text) => {
               </div>
             </div>
           </div>
-          
+
           <div v-if="uploading" class="upload-progress">
             <div class="progress-bar">
               <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
@@ -4517,9 +4506,9 @@ const copyToClipboard = (text) => {
           </div>
           <div class="form-group">
             <label>最大分块大小 (maxChunkSize) <span class="required">*</span></label>
-            <input 
-              v-model.number="chunkForm.maxChunkSize" 
-              type="number" 
+            <input
+              v-model.number="chunkForm.maxChunkSize"
+              type="number"
               class="form-input"
               placeholder="请输入最大分块大小"
               min="100"
@@ -4528,9 +4517,9 @@ const copyToClipboard = (text) => {
           </div>
           <div class="form-group">
             <label>最大重叠大小 (maxOverlapSize) <span class="required">*</span></label>
-            <input 
-              v-model.number="chunkForm.maxOverlapSize" 
-              type="number" 
+            <input
+              v-model.number="chunkForm.maxOverlapSize"
+              type="number"
               class="form-input"
               placeholder="请输入最大重叠大小"
               min="0"
@@ -4565,8 +4554,8 @@ const copyToClipboard = (text) => {
         <div class="modal-body">
           <div class="form-group">
             <label>知识块内容</label>
-            <textarea 
-              v-model="editForm.content" 
+            <textarea
+              v-model="editForm.content"
               class="form-textarea"
               placeholder="请输入知识块内容"
               rows="10"
@@ -4595,8 +4584,8 @@ const copyToClipboard = (text) => {
         <div class="modal-body">
           <div class="form-group">
             <label>知识块内容 <span class="required">*</span></label>
-            <textarea 
-              v-model="createChunkForm.chunkText" 
+            <textarea
+              v-model="createChunkForm.chunkText"
               class="form-textarea"
               placeholder="请输入知识块内容"
               rows="10"
@@ -4614,7 +4603,7 @@ const copyToClipboard = (text) => {
         </div>
       </div>
     </div>
-    
+
     <!-- 知识块删除确认弹窗 -->
     <div v-if="showChunkDeleteConfirm" class="modal-overlay" @click.self="handleChunkDeleteCancel">
       <div class="modal-content delete-modal">
@@ -4749,17 +4738,18 @@ const copyToClipboard = (text) => {
 .sidebar {
   width: 270px;
   min-width: 270px;
-  background-color: #162431;
+  background: radial-gradient(circle at top left, #374151, #111827);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  transition: all 0.3s ease;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s ease;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
 }
 
 .sidebar.collapsed {
-  width: 60px;
-  min-width: 60px;
+  width: 70px;
+  min-width: 70px;
 }
 
 /* Logo区域 */
@@ -4785,12 +4775,22 @@ const copyToClipboard = (text) => {
   color: white;
   font-weight: 600;
   font-size: 16px;
+  flex-shrink: 0;
 }
 
 .logo-text {
   font-size: 16px;
   font-weight: 500;
   color: white;
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity 0.3s ease, width 0.3s ease;
+  overflow: hidden;
+}
+
+.sidebar.collapsed .logo-text {
+  opacity: 0;
+  width: 0;
 }
 
 /* 侧边栏内容区域 */
@@ -4806,6 +4806,13 @@ const copyToClipboard = (text) => {
   padding: 0 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  opacity: 1;
+  transition: opacity 0.3s ease 0.1s;
+  white-space: nowrap;
+}
+
+.sidebar.collapsed .section-title {
+  opacity: 0;
 }
 
 .menu-list {
@@ -4818,10 +4825,10 @@ const copyToClipboard = (text) => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 6px 12px;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.3s ease, transform 0.3s ease;
   color: white;
   font-size: 15px;
   position: relative;
@@ -4830,6 +4837,9 @@ const copyToClipboard = (text) => {
 .menu-item:hover {
   background-color: rgba(255, 255, 255, 0.1);
   color: white;
+}
+
+.menu-item:hover .menu-text {
   transform: translateX(4px);
 }
 
@@ -4849,11 +4859,22 @@ const copyToClipboard = (text) => {
   height: 60%;
   background-color: #667eea;
   border-radius: 0 3px 3px 0;
+  transition: height 0.3s ease;
+}
+
+.menu-item:hover.active::before {
+  height: 80%;
 }
 
 .sidebar.collapsed .menu-item {
   justify-content: center;
   padding: 10px;
+}
+
+.sidebar.collapsed .menu-item .menu-text {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
 }
 
 .sidebar.collapsed .menu-item.active {
@@ -4870,6 +4891,13 @@ const copyToClipboard = (text) => {
   justify-content: center;
   width: 24px;
   height: 24px;
+  flex-shrink: 0;
+}
+
+.menu-text {
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 /* 主内容区 */
@@ -5148,7 +5176,7 @@ const copyToClipboard = (text) => {
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5172,11 +5200,8 @@ const copyToClipboard = (text) => {
 }
 
 .page-content {
-  background-color: white;
-  border-radius: 8px;
   padding: 24px;
   min-height: 400px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .page-content h2 {
